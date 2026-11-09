@@ -85,6 +85,11 @@
   .tag.arbeit .h{color:var(--gruen)}
   .tag.zu{background:var(--gruen);color:#fff;border-color:var(--gruen)} .tag.zu .h{color:#fff}
   .tag.urlaub{background:var(--blauhell);color:var(--blau)} .tag.krank{background:var(--rothell);color:var(--rot)}
+  .tag.dim{opacity:.22}
+  .filter{display:flex;gap:6px;margin:0 0 10px}
+  .filter button{flex:1;padding:9px 4px;border-radius:12px;background:#fff;font-weight:700;font-size:.85rem;color:var(--grau);border:2px solid transparent}
+  .filter button.an.f-alle{border-color:var(--navy);color:var(--navy)} .filter button.an.f-U{background:var(--blauhell);color:var(--blau);border-color:var(--blau)} .filter button.an.f-K{background:var(--rothell);color:var(--rot);border-color:var(--rot)}
+  .jliste .mon{font-weight:700;color:var(--navy);margin:10px 0 4px} .jliste .tage{display:flex;flex-wrap:wrap;gap:6px}
   .tag.heute{box-shadow:0 0 0 3px var(--navy) inset}
   .tag.laufend::after{content:"";position:absolute;top:5px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--gelb);animation:puls 1.2s infinite}
   @keyframes puls{50%{opacity:.25}}
@@ -281,7 +286,7 @@ window.addEventListener('online', schlangeSenden);
 document.addEventListener('visibilitychange', function(){ if(!document.hidden){ schlangeSenden(); } });
 
 function schl(ma,m){ return ma+'|'+m; }
-function monatSetzen(m){ S.monate[schl(m.ma,m.monat)] = m; if(m.ma===S.nutzer.id) S.laufend = m.laufend; lokalSichern(); }
+function monatSetzen(m){ if(S.jahre) delete S.jahre[m.ma+'|'+m.monat.slice(0,4)]; S.monate[schl(m.ma,m.monat)] = m; if(m.ma===S.nutzer.id) S.laufend = m.laufend; lokalSichern(); }
 function lokalSichern(){ try{ if(!S.nutzer) return; var mc={}, k=schl(S.nutzer.id, monatVon(heuteIso())); if(S.monate[k]) mc[k]=S.monate[k];
   LS.setItem('ze_monate', JSON.stringify(mc)); LS.setItem('ze_laufend', JSON.stringify(S.laufend||null)); }catch(e){} }
 function monatDaten(ma,m){ return S.monate[schl(ma,m)]; }
@@ -495,6 +500,9 @@ function zeigeKalender(){
   if(S.nutzer.rolle==='admin' && S.mitarbeiter.length>1){
     h+='<select class="eing sel-ma" onchange="S.ma=this.value;zeigeKalender()">'+S.mitarbeiter.map(function(x){return '<option value="'+x.id+'" '+(x.id===ma?'selected':'')+'>'+esc(x.name)+'</option>';}).join('')+'</select>';
   }
+  var fl=S.kalFilter||'';
+  h+='<div class="filter">'+[['','f-alle',tr()?'Hepsi<br><small>Alle</small>':'Alle'],['U','f-U','🏖 '+(tr()?'İzin':'Urlaub')],['K','f-K','🤒 '+(tr()?'Hasta':'Krank')]].map(function(f){
+    return '<button class="'+f[1]+(fl===f[0]?' an':'')+'" onclick="S.kalFilter=\''+f[0]+'\';zeigeKalender()">'+f[2]+'</button>'; }).join('')+'</div>';
   h+='<div class="kal-kopf"><button class="pfeil" onclick="kalBlaettern(-1)">‹</button><div class="mon">'+monatText(mo)+'</div><button class="pfeil" onclick="kalBlaettern(1)">›</button></div>';
   if(!d){ $('inhalt').innerHTML=h+'<div class="lade" style="min-height:200px">…</div>'; ladeMonat(ma,mo).then(function(){ if(S.ansicht==='kalender'&&S.kalMonat===mo) zeigeKalender(); }).catch(function(f){ toast(fehlerText(f)); }); return; }
   h+='<div class="kal-wrap" id="kalwrap"><div class="kal" id="kal">';
@@ -514,6 +522,7 @@ function zeigeKalender(){
     else if(arbeit){ kl.push(zu?'zu':'arbeit'); unten=(stunden?fStd(stunden):'…')+(zu?' ✓':''); }
     else if(ft){ kl.push('ft'); unten=tr()?'Tatil':'Feiertag'; }
     else if(we) kl.push('we');
+    if(fl && !(fl==='U'?u:k)) kl.push('dim');
     if(iso===heute) kl.push('heute');
     if(lauf && lauf.datum===iso) kl.push('laufend');
     h+='<button class="'+kl.join(' ')+'" onclick="tagDetail(\''+iso+'\')"><span class="n">'+t+'</span><span class="h">'+esc(unten)+'</span></button>';
@@ -521,13 +530,31 @@ function zeigeKalender(){
   h+='</div></div>';
   var s=d.eintraege.reduce(function(a,e){ if(e.typ==='U')a.u++; else if(e.typ==='K')a.k++; else {a.h+=std(e); a.t[e.datum]=1;} return a; },{h:0,u:0,k:0,t:{}});
   h+='<div class="summe"><div class="kachel"><div class="w">'+fStd(s.h)+'</div><div class="l">'+Lt('gesamt')+'</div></div><div class="kachel"><div class="w">'+Object.keys(s.t).length+'</div><div class="l">'+Lt('tage')+'</div></div>'+
-     '<div class="kachel"><div class="w">'+s.u+'</div><div class="l">'+Lt('urlaub')+'</div></div><div class="kachel"><div class="w">'+s.k+'</div><div class="l">'+Lt('krank')+'</div></div></div>';
+     '<div class="kachel"><div class="w">'+s.u+'</div><div class="l">'+Lt('urlaub')+(d.urlaubKonto&&d.urlaubKonto.anspruch?'<br><b style="color:var(--blau)">'+(tr()?'Kalan ':'Rest ')+d.urlaubKonto.rest+' / '+d.urlaubKonto.anspruch+'</b>':'')+'</div></div><div class="kachel"><div class="w">'+s.k+'</div><div class="l">'+Lt('krank')+'</div></div></div>';
   if(d.gesperrt) h+='<div class="hinweis">🔒 '+Lt('gesperrt')+'</div>';
   if(mo!==monatVon(heute)) h+='<button class="mittel b-hell" onclick="S.kalMonat=monatVon(heuteIso());zeigeKalender()">'+L('zuHeute')+'</button><div style="height:8px"></div>';
   if(!d.gesperrt||S.nutzer.rolle==='admin') h+='<button class="mittel b-hell" onclick="abwesenheitForm()">🏖 '+L('abwesend')+'</button>';
   h+='<div class="legende"><span class="pill p-gruen">■ '+Lt('tagZu')+'</span><span class="pill" style="background:#fff;border:2px solid #9fd3ad;color:var(--gruen)">'+(tr()?'Açık / ':'')+'Offen</span><span class="pill p-blau">'+Lt('urlaub')+'</span><span class="pill p-rot">'+Lt('krank')+'</span><span class="pill p-grau">'+Lt('feiertag')+'</span></div>';
+  if(fl) h+='<div class="karte jliste" id="jliste" style="margin-top:12px"><div class="leer">…</div></div>';
   $('inhalt').innerHTML=h;
   wischen($('kalwrap'), kalBlaettern);
+  if(fl) jahresliste(ma, mo.slice(0,4), fl);
+}
+/** Jahresliste aller Urlaubs- bzw. Krankheitstage */
+function jahresliste(ma, jahr, typ){
+  S.jahre=S.jahre||{}; var k=ma+'|'+jahr;
+  var zeigen=function(d){ var el=$('jliste'); if(!el||S.kalFilter!==typ) return;
+    var tage=d.tage.filter(function(t){return t.typ===typ;}), proMon={};
+    tage.forEach(function(t){ var m=t.datum.slice(0,7); (proMon[m]=proMon[m]||[]).push(t); });
+    var h='<p class="titel">'+(typ==='U'?'🏖 '+Lt('urlaub'):'🤒 '+Lt('krank'))+' '+jahr+': '+tage.length+' '+(tr()?'gün / ':'')+'Tage</p>';
+    if(typ==='U'&&d.urlaubKonto&&d.urlaubKonto.anspruch) h+='<div class="klein">'+(tr()?'Hak '+d.urlaubKonto.anspruch+' · kalan <b>'+d.urlaubKonto.rest+'</b><br>':'')+'Anspruch '+d.urlaubKonto.anspruch+' · davon vor der App '+(d.urlaubKonto.genommen-tage.length)+' · <b style="color:var(--blau)">Rest '+d.urlaubKonto.rest+'</b></div>';
+    if(!tage.length) h+='<div class="leer">'+L('kein')+'</div>';
+    Object.keys(proMon).sort().forEach(function(m){ var i=+m.slice(5,7)-1;
+      h+='<div class="mon">'+(tr()?TR_MON[i]+' / ':'')+DE_MON[i]+' ('+proMon[m].length+')</div><div class="tage">'+proMon[m].map(function(t){
+        var dt=dObj(t.datum); return '<button class="pill '+(typ==='U'?'p-blau':'p-rot')+'" onclick="S.kalMonat=\''+m+'\';zeigeKalender();setTimeout(function(){tagDetail(\''+t.datum+'\')},200)">'+(tr()?TR_KURZ[(dt.getDay()+6)%7]:DE_KURZ[(dt.getDay()+6)%7])+' '+dt.getDate()+'.</button>'; }).join('')+'</div>'; });
+    el.innerHTML=h; };
+  if(S.jahre[k]) return zeigen(S.jahre[k]);
+  rufe('jahr',{ma:ma, jahr:jahr}).then(function(d){ S.jahre[k]=d; zeigen(d); }).catch(function(f){ var el=$('jliste'); if(el) el.innerHTML='<div class="leer">'+esc(fehlerText(f))+'</div>'; });
 }
 function kalBlaettern(r){
   var k=$('kal'); S.kalMonat=monatPlus(S.kalMonat, r>0?1:-1);
@@ -632,7 +659,7 @@ function abwSpeichern(){
   if(!von||!bis||bis<von) return fFehler(Lt('ENDE_VOR_BEGINN'));
   rufe('abwesenheit',{ma:S.ma||S.nutzer.id, typ:typ, von:von, bis:bis}).then(function(m){ monatSetzen(m);
     var bisM=monatVon(bis); if(bisM!==monatVon(von)) delete S.monate[schl(m.ma,bisM)];
-    schliesseBlatt(); toast('✓'); render(); }).catch(function(f){ fFehler(fehlerText(f)); });
+    S.uebersicht=null; schliesseBlatt(); toast('✓'); render(); }).catch(function(f){ fFehler(fehlerText(f)); });
 }
 
 /* ======================= VERWALTUNG (nur Admin) ======================= */
@@ -649,14 +676,16 @@ function zeigeVerwaltung(){
       h+='<div class="karte"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:1.05rem">'+esc(p.name)+'</b>'+(p.gesperrt?'<span class="pill p-gruen">🔒 abgerechnet</span>':'')+'</div>'+
         '<div class="summe" style="margin:10px 0"><div class="kachel" style="background:var(--bg)"><div class="w">'+fStd(p.stunden)+'</div><div class="l">Stunden</div></div><div class="kachel" style="background:var(--bg)"><div class="w">'+p.tage+'</div><div class="l">Arbeitstage</div></div>'+
         '<div class="kachel" style="background:var(--bg)"><div class="w">'+p.urlaub+' / '+p.krank+'</div><div class="l">Urlaub / Krank</div></div><div class="kachel" style="background:var(--bg)"><div class="w">'+fStd(p.km)+'</div><div class="l">km</div></div></div>'+
+        (p.urlaubKonto&&p.urlaubKonto.anspruch?'<div class="klein" style="margin-bottom:8px">🏖 Urlaub '+p.urlaubKonto.jahr+': <b>'+p.urlaubKonto.genommen+'</b> von '+p.urlaubKonto.anspruch+' genommen · <b style="color:var(--blau)">Rest '+p.urlaubKonto.rest+' Tage</b></div>':'<div class="klein" style="margin-bottom:8px">🏖 Urlaubsanspruch noch nicht eingetragen (Team → Bearbeiten)</div>')+
         (p.offen?'<div class="hinweis">⚠ '+p.offen+' Arbeitstag(e) noch nicht abgeschlossen</div>':'')+
         (p.pausenTage&&p.pausenTage.length?'<div class="hinweis">⚠ Zu wenig Pause an '+p.pausenTage.length+' Tag(en): '+p.pausenTage.map(function(t){return t.slice(8,10)+'.'+t.slice(5,7)+'.';}).join(', ')+'</div>':'')+
+        '<button class="mittel b-hell" style="margin-bottom:8px" onclick="S.ma=\''+p.id+'\';abwesenheitForm()">🏖 Urlaub / Krank eintragen</button>'+
         '<div class="reihe"><button class="mittel b-hell" onclick="S.ma=\''+p.id+'\';S.kalMonat=S.adminMonat;gehe(\'kalender\')">📅 Kalender</button>'+
-        '<button class="mittel b-navy" style="color:#fff" id="mb_'+p.id+'" onclick="bericht(\''+p.id+'\')">📄 '+(p.gesperrt?'Neu erstellen':'Stundenzettel')+'</button></div>'+
-        (p.gesperrt?'<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px"><a class="link" href="'+p.pdfUrl+'" target="_blank">PDF öffnen</a><a class="link" href="'+p.tabelleUrl+'" target="_blank">Tabelle öffnen</a><button class="link" style="color:var(--rot)" onclick="entsperren(\''+p.id+'\')">Entsperren</button></div>':'')+
+        '<button class="mittel b-navy" style="color:#fff" id="mb_'+p.id+'" onclick="bericht(\''+p.id+'\')">📄 '+(p.pdfUrl?'Neu erstellen':'Stundenzettel')+'</button></div>'+
+        (p.pdfUrl?'<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px"><a class="link" href="'+p.pdfUrl+'" target="_blank">PDF öffnen</a><a class="link" href="'+p.tabelleUrl+'" target="_blank">Tabelle öffnen</a>'+(p.gesperrt?'<button class="link" style="color:var(--rot)" onclick="entsperren(\''+p.id+'\')">Entsperren</button>':'')+'</div>':'')+
         '</div>';
     });
-    h+='<p class="klein">Der Stundenzettel wird als Tabelle + PDF in Google Drive unter „Zeiterfassung/Monatsberichte“ gespeichert. Danach ist der Monat für den Mitarbeiter gesperrt.</p>';
+    h+='<p class="klein">Der Stundenzettel wird als Tabelle + PDF in Google Drive unter „Zeiterfassung/Monatsberichte“ gespeichert. Mitten im Monat ist er ein Zwischenstand; ist der Monat vorbei, wird er danach für den Mitarbeiter gesperrt (du kannst weiter korrigieren).</p>';
   }
   if(S.adminTab==='baustellen'){
     h+='<div class="karte"><p class="titel">Neue Baustelle</p><input class="eing" id="nbName" placeholder="Name / Kunde (z. B. Sonnenhagen Hannover)"><div style="height:8px"></div><input class="eing" id="nbAdr" placeholder="Adresse (optional)"><div style="height:10px"></div><button class="mittel b-gruen" style="color:#fff" onclick="bsSpeichern()">＋ Anlegen</button></div>';
@@ -693,11 +722,14 @@ function maForm(id){
     '<label class="f">Sprache der App</label><select class="eing" id="mSpr"><option value="tr" '+(m.sprache==='tr'?'selected':'')+'>Türkisch mit Deutsch darunter</option><option value="de" '+(m.sprache!=='tr'?'selected':'')+'>Deutsch</option></select>'+
     '<label class="f">Rolle</label><select class="eing" id="mRolle"><option value="mitarbeiter" '+(m.rolle!=='admin'?'selected':'')+'>Mitarbeiter (sieht nur sich selbst)</option><option value="admin" '+(m.rolle==='admin'?'selected':'')+'>Admin (sieht alles)</option></select>'+
     '<label class="f">'+(id?'Neue PIN (leer lassen = unverändert)':'PIN (4–8 Ziffern)')+'</label><input class="eing" id="mPin" inputmode="numeric" maxlength="8" autocomplete="off">'+
+    '<label class="f">Urlaubstage pro Jahr</label><input class="eing" id="mUrlaub" inputmode="numeric" value="'+(m.urlaubJahr||'')+'" placeholder="z. B. 24">'+
+    '<label class="f">Davon '+new Date().getFullYear()+' schon genommen (vor der App)</label><input class="eing" id="mUrlaubVorher" inputmode="numeric" value="'+(m.urlaubStartJahr==String(new Date().getFullYear())?m.urlaubStartGenommen:'')+'" placeholder="z. B. 18">'+
     (id?'<label class="f" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="mAktiv" '+(m.aktiv?'checked':'')+' style="width:22px;height:22px"> Zugang aktiv</label>':'')+
     '<div id="fFehler"></div><div style="height:14px"></div><button class="gross b-navy" onclick="maSpeichern('+(id?'\''+id+'\'':'null')+')">Speichern</button>');
 }
 function maSpeichern(id){
-  var d={id:id, name:$('mName').value, sprache:$('mSpr').value, rolle:$('mRolle').value, pin:$('mPin').value.trim(), aktiv: id?$('mAktiv').checked:true};
+  var d={id:id, name:$('mName').value, sprache:$('mSpr').value, rolle:$('mRolle').value, pin:$('mPin').value.trim(), aktiv: id?$('mAktiv').checked:true,
+         urlaubJahr:$('mUrlaub').value.trim(), urlaubStartGenommen:$('mUrlaubVorher').value.trim()};
   rufe('mitarbeiterSpeichern',{mitarbeiter:d}).then(function(r){ schliesseBlatt(); nachAdmin(r); toast('✓ gespeichert'); }).catch(function(f){ fFehler(fehlerText(f)); });
 }
 
