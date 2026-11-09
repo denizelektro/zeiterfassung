@@ -807,10 +807,15 @@ function pushKarte(){
     var abo = (android||ios) ? 'ntfy://'+d.server+'/'+d.thema : 'https://'+d.server+'/'+d.thema;
     $('pushInhalt').className=''; $('pushInhalt').innerHTML=
       '<p class="klein" style="text-align:left">'+(tr()?'1) Ücretsiz <b>ntfy</b> uygulamasını yükleyin. 2) „Abone ol“a dokunun. 3) Onaylayın.<br>':'')+'1) Kostenlose App <b>ntfy</b> installieren (ohne Konto). 2) Auf „Abonnieren“ tippen. 3) In ntfy bestätigen.</p>'+
-      '<div class="reihe"><a class="mittel b-hell" style="text-decoration:none" href="'+store+'" target="_blank">⬇️ ntfy</a><a class="mittel b-blau" style="color:#fff;text-decoration:none" href="'+abo+'" onclick="LS.setItem(\'ze_push_ok\',\'1\')">🔔 '+(tr()?'Abone ol / ':'')+'Abonnieren</a></div>'+
-      '<p class="klein" style="text-align:left;margin-top:8px">'+(tr()?'Elle: sunucu ntfy.sh, konu:<br>':'Von Hand: Server ntfy.sh, Thema:<br>')+'<code style="user-select:all">'+esc(d.thema)+'</code></p>';
+      '<div class="reihe"><a class="mittel b-hell" style="text-decoration:none" href="'+store+'" target="_blank">⬇️ ntfy</a><a class="mittel b-blau" style="color:#fff;text-decoration:none" href="'+abo+'">🔔 '+(tr()?'Abone ol / ':'')+'Abonnieren</a></div>'+
+      '<p class="klein" style="text-align:left;margin-top:10px">'+(tr()?'Olmazsa: ntfy uygulamasında <b>+</b> → bu konuyu girin → <b>Subscribe</b><br>':'')+'Falls das nicht klappt: in der ntfy-App auf <b>+</b> tippen, dieses Thema einfügen, <b>Subscribe</b>:</p>'+
+      '<div style="display:flex;gap:6px;align-items:center"><code id="ntfyThema" style="user-select:all;flex:1;background:#eef1f4;padding:10px;border-radius:10px;font-size:.85rem;word-break:break-all">'+esc(d.thema)+'</code>'+
+      '<button class="pill p-blau" onclick="themaKopieren()">📋 '+(tr()?'Kopyala':'Kopieren')+'</button></div>'+
+      '<div style="height:10px"></div><div class="reihe"><button class="mittel b-hell" onclick="pushTest()">🧪 '+(tr()?'Test / ':'')+'Test-Meldung</button><button class="mittel b-gruen" style="color:#fff" onclick="LS.setItem(\'ze_push_ok\',\'1\');pushKarte()">✓ '+(tr()?'Tamam / ':'')+'Klappt</button></div>';
   }).catch(function(f){ var p=$('pushInhalt'); if(p) p.textContent=fehlerText(f); });
 }
+function themaKopieren(){ var t=$('ntfyThema').textContent; try{ navigator.clipboard.writeText(t).then(function(){ toast('📋 '+(tr()?'Kopyalandı / ':'')+'Kopiert'); }, function(){ toast(t); }); }catch(e){ toast(t); } }
+function pushTest(){ rufe('pushTest',{}).then(function(){ toast('🧪 '+(tr()?'Gönderildi – telefona bakın / ':'')+'Gesendet – aufs Handy schauen'); }).catch(function(f){ toast(fehlerText(f)); }); }
 // Neue Nachrichten regelmäßig prüfen, solange die App offen ist
 setInterval(function(){ if(S.token&&S.nutzer&&!document.hidden) rufe('meldungen',{}).then(function(d){ var vorher=S.ungelesen||0; S.nachr=d.liste; S.ungelesen=d.ungelesen; if(S.ansicht==='nachrichten') listeNachrichten(); if(d.ungelesen!==vorher) badgeAktualisieren(); }).catch(function(){}); }, 60000);
 if(location.hash==='#nachrichten'){ S.ansicht='nachrichten'; try{ history.replaceState(null,'',location.pathname); }catch(e){} }

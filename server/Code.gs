@@ -83,6 +83,7 @@ var AKTIONEN = {
   meldungSenden:  { fn: function (ich, d) { return meldungSenden_(ich, d); } },
   meldungGelesen: { fn: function (ich, d) { return meldungGelesen_(ich, d); } },
   benachrichtigung: { fn: function (ich, d) { return { thema: ntfyThema_(ich.id), server: 'ntfy.sh' }; } },
+  pushTest:       { fn: function (ich, d) { ntfyThema_(ich.id); pushSenden_(ich.id, '🔔 Zeiterfassung', 'Test ✓ – Meldungen kommen an', 3); return true; } },
   abmelden:       { fn: function (ich, d, token) { PropertiesService.getScriptProperties().deleteProperty('T_' + token); return true; } },
   // nur Admin
   uebersicht:     { admin: true, fn: function (ich, d) { return uebersicht_(d); } },
