@@ -40,6 +40,11 @@
   .mittel{border-radius:14px;padding:12px 14px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;min-height:54px;width:100%}
   .reihe{display:flex;gap:10px} .reihe>*{flex:1}
   .bs-liste{display:flex;flex-direction:column;gap:8px;margin:10px 0 14px}
+  .bs-zeile{display:flex;gap:8px;align-items:stretch}
+  .bs-zeile .bs{flex:1;min-width:0}
+  .navi{flex:none;width:64px;border-radius:14px;background:var(--blauhell);color:var(--blau);font-size:.72rem;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;line-height:1.1;text-align:center;padding:6px 4px}
+  .navi .p{font-size:20px}
+  .navi-gross{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:10px 16px;border-radius:99px;background:var(--blauhell);color:var(--blau);font-weight:700}
   .bs{border:2px solid var(--linie);border-radius:14px;padding:14px;text-align:left;background:#fff;display:flex;align-items:center;gap:12px}
   .bs .punkt{width:22px;height:22px;border-radius:50%;border:2px solid #b8bec6;flex:none}
   .bs.an{border-color:var(--gruen);background:var(--gruenhell)} .bs.an .punkt{border-color:var(--gruen);background:var(--gruen);box-shadow:inset 0 0 0 4px #fff}
@@ -132,6 +137,7 @@
   a.link{color:var(--blau);font-weight:600;text-decoration:none}
   .sel-ma{margin-bottom:10px}
   .hidden{display:none!important}
+  body.busy .gross, body.busy .mittel, body.busy .navi, body.busy .pill, body.busy #blatt button{pointer-events:none;opacity:.55}
   html,body{overscroll-behavior:none}
   .login{height:100dvh}
 </style>
@@ -183,7 +189,7 @@ var TX = {
   eintragBearb:['Kaydı düzenle','Eintrag bearbeiten'], eintragNeu:['Yeni kayıt','Neuer Eintrag'], zuHeute:['Bugüne git','Zu heute'],
   nachher:['Malzeme ve km ekle','Material & km ergänzen'], nichtJetzt:['Şimdi değil','Nicht jetzt'],
   sicherLoeschen:['Bu kayıt silinsin mi?','Eintrag wirklich löschen?'], tagLaeuft:['Çalışma devam ediyor','Arbeit läuft noch'],
-  pauseBisher:['Mola','Pause'], offenTage:['Kapatılmamış gün','Offene Tage']
+  pauseBisher:['Mola','Pause'], navi:['Yol tarifi','Navigation'], offenTage:['Kapatılmamış gün','Offene Tage']
 };
 var FEHLER = {
   PIN_FALSCH:['PIN yanlış','PIN falsch'], ZU_VIELE_VERSUCHE:['Çok fazla deneme. 15 dakika bekleyin.','Zu viele Versuche. 15 Minuten warten.'],
@@ -234,7 +240,16 @@ function feiertag(iso){
 function uuid(){ return 'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,10); }
 
 /* ======================= Server-Aufrufe (mit Offline-Warteschlange) ======================= */
+var _beschaeftigt=0;
+function beschaeftigt(n){ _beschaeftigt=Math.max(0,_beschaeftigt+n); document.body.classList.toggle('busy', _beschaeftigt>0); }
 function rufe(aktion, daten){
+  var schreibend=['monat','start','uebersicht'].indexOf(aktion)<0;   // Doppel-Tippen beim Speichern verhindern
+  if(schreibend) beschaeftigt(1);
+  var p = rufeRoh(aktion, daten);
+  if(schreibend) p.then(function(){ beschaeftigt(-1); }, function(){ beschaeftigt(-1); });
+  return p;
+}
+function rufeRoh(aktion, daten){
   return new Promise(function(ok, nein){
     google.script.run.withSuccessHandler(function(r){
       if(!r.ok){ if(r.fehler==='ANMELDUNG'){ abmeldenLokal(); return nein({anmeldung:true}); } return nein({fehler:r.fehler}); }
@@ -363,6 +378,7 @@ function menue(){
 function abmelden(){ rufe('abmelden',{}).catch(function(){}).then(abmeldenLokal); }
 
 /* ======================= HEUTE ======================= */
+function bsAdresse(id){ var b=(S.alleBaustellen.length?S.alleBaustellen:S.baustellen).filter(function(x){return x.id===id;})[0]; return b?b.adresse:''; }
 function bsName(id){ var b=(S.alleBaustellen.length?S.alleBaustellen:S.baustellen).filter(function(x){return x.id===id;})[0] || S.baustellen.filter(function(x){return x.id===id;})[0]; return b?b.name:'—'; }
 function zeigeHeute(){
   var heute=heuteIso(), m=monatDaten(S.nutzer.id, monatVon(heute)) || {eintraege:[],abgeschlossen:[]};
@@ -377,6 +393,7 @@ function zeigeHeute(){
     var inPause=!!l.pauseStart;
     h+='<div class="laeuft"><span class="pill '+(inPause?'p-gelb':'p-gruen')+'">'+(inPause?'❚❚ '+Lt('inPause'):'● '+Lt('laeuftSeit')+' '+l.start)+'</span>'+
        '<div class="uhr" id="uhr">'+laufzeit(l)+'</div><div style="font-weight:700">'+esc(bsName(l.baustelle))+'</div>'+
+       (bsAdresse(l.baustelle)?'<button class="navi-gross" onclick="navi(\''+l.baustelle+'\')">📍 '+Lt('navi')+'</button>':'')+
        (l.datum!==heute?'<div class="klein">'+esc(l.datum)+'</div>':'')+'</div>';
     h+='<div class="reihe" style="margin-bottom:10px">'+(inPause
         ? '<button class="mittel b-gruen" style="color:#fff" onclick="stempel(\'weiter\')">▶ '+L('weiter')+'</button>'
@@ -396,7 +413,22 @@ function laufzeit(l){ if(!l) return ''; var j=jetztZeit(), sameDay=l.datum===heu
 function bsListe(fn){
   if(!S.baustellen.length) return '<div class="leer">'+(tr()?'Henüz şantiye yok<br>':'')+'Noch keine Baustelle angelegt</div>';
   if(!S.auswahlBs || !S.baustellen.some(function(b){return b.id===S.auswahlBs;})) S.auswahlBs = LS.getItem('ze_letzteBs') && S.baustellen.some(function(b){return b.id===LS.getItem('ze_letzteBs');}) ? LS.getItem('ze_letzteBs') : (S.baustellen.length===1?S.baustellen[0].id:null);
-  return '<div class="bs-liste">'+S.baustellen.map(function(b){ return '<button class="bs '+(S.auswahlBs===b.id?'an':'')+'" onclick="'+fn+'(\''+b.id+'\')"><span class="punkt"></span><span><b>'+esc(b.name)+'</b>'+(b.adresse?'<small>'+esc(b.adresse)+'</small>':'')+'</span></button>'; }).join('')+'</div>';
+  return '<div class="bs-liste">'+S.baustellen.map(function(b){ return '<div class="bs-zeile"><button class="bs '+(S.auswahlBs===b.id?'an':'')+'" onclick="'+fn+'(\''+b.id+'\')"><span class="punkt"></span><span><b>'+esc(b.name)+'</b>'+(b.adresse?'<small>'+esc(b.adresse)+'</small>':'')+'</span></button>'+
+    (b.adresse?'<button class="navi" onclick="navi(\''+b.id+'\')"><span class="p">📍</span>'+(tr()?'Yol tarifi':'Navi')+'</button>':'')+'</div>'; }).join('')+'</div>';
+}
+/** Navigation zur Baustelle: Android = Standard-Karten-App, iPhone = Auswahl, PC = Google Maps */
+function navi(id){
+  var b=(S.alleBaustellen.length?S.alleBaustellen:S.baustellen).filter(function(x){return x.id===id;})[0] || S.baustellen.filter(function(x){return x.id===id;})[0];
+  if(!b||!b.adresse){ toast((tr()?'Adres yok / ':'')+'Keine Adresse hinterlegt'); return; }
+  var q=encodeURIComponent(b.adresse), ua=navigator.userAgent||'';
+  var gmaps='https://www.google.com/maps/dir/?api=1&destination='+q;
+  if(/Android/i.test(ua)){ location.href='geo:0,0?q='+q; return; }
+  if(/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints>1)){
+    oeffneBlatt('<h2>📍 '+esc(b.name)+'</h2><p class="klein">'+esc(b.adresse)+'</p>'+
+      '<a class="mittel b-navy" style="color:#fff;text-decoration:none" href="maps://?daddr='+q+'">'+(tr()?'<b>Apple Haritalar</b>&nbsp;/ ':'')+'Apple Karten</a><div style="height:8px"></div>'+
+      '<a class="mittel b-hell" style="text-decoration:none" href="'+gmaps+'">Google Maps</a><div style="height:8px"></div>'+
+      '<button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>'); return; }
+  window.open(gmaps,'_blank');
 }
 function waehleBs(id){ S.auswahlBs=id; LS.setItem('ze_letzteBs',id); zeigeHeute(); }
 function stempel(art, bs){
@@ -629,7 +661,7 @@ function zeigeVerwaltung(){
   if(S.adminTab==='baustellen'){
     h+='<div class="karte"><p class="titel">Neue Baustelle</p><input class="eing" id="nbName" placeholder="Name / Kunde (z. B. Sonnenhagen Hannover)"><div style="height:8px"></div><input class="eing" id="nbAdr" placeholder="Adresse (optional)"><div style="height:10px"></div><button class="mittel b-gruen" style="color:#fff" onclick="bsSpeichern()">＋ Anlegen</button></div>';
     h+='<div class="karte">'+(S.alleBaustellen.length?S.alleBaustellen.map(function(b){ return '<div class="zeileL"><div><b style="'+(b.aktiv?'':'opacity:.45')+'">'+esc(b.name)+'</b>'+(b.adresse?'<div class="klein">'+esc(b.adresse)+'</div>':'')+'</div>'+
-      '<div style="display:flex;gap:6px"><button class="pill p-grau" onclick="bsBearbeiten(\''+b.id+'\')">✎</button><button class="pill '+(b.aktiv?'p-gruen':'p-grau')+'" onclick="bsAktiv(\''+b.id+'\','+(!b.aktiv)+')">'+(b.aktiv?'aktiv':'beendet')+'</button></div></div>'; }).join(''):'<div class="leer">Noch keine Baustellen</div>')+'</div>';
+      '<div style="display:flex;gap:6px">'+(b.adresse?'<button class="pill p-blau" onclick="navi(\''+b.id+'\')">📍</button>':'')+'<button class="pill p-rot" onclick="bsLoeschen(\''+b.id+'\')">🗑</button>'+'<button class="pill p-grau" onclick="bsBearbeiten(\''+b.id+'\')">✎</button><button class="pill '+(b.aktiv?'p-gruen':'p-grau')+'" onclick="bsAktiv(\''+b.id+'\','+(!b.aktiv)+')">'+(b.aktiv?'aktiv':'beendet')+'</button></div></div>'; }).join(''):'<div class="leer">Noch keine Baustellen</div>')+'</div>';
     h+='<p class="klein">„Beendet“ blendet die Baustelle in Ahmets Auswahl aus; alte Einträge bleiben erhalten.</p>';
   }
   if(S.adminTab==='team'){
@@ -649,6 +681,8 @@ function entsperrenJetzt(id){
   rufe('monatEntsperren',{ma:id, monat:S.adminMonat}).then(function(u){ S.uebersicht={monat:S.adminMonat,liste:u}; delete S.monate[schl(id,S.adminMonat)]; zeigeVerwaltung(); }).catch(function(f){ toast(fehlerText(f)); }); }
 function nachAdmin(d){ startSetzen(d); zeigeVerwaltung(); }
 function bsSpeichern(){ var n=$('nbName').value.trim(); if(!n) return toast('Name fehlt'); rufe('baustelleSpeichern',{baustelle:{name:n, adresse:$('nbAdr').value}}).then(function(d){ nachAdmin(d); toast('✓ Baustelle angelegt – erscheint sofort bei allen'); }).catch(function(f){ toast(fehlerText(f)); }); }
+function bsLoeschen(id){ var b=S.alleBaustellen.filter(function(x){return x.id===id;})[0];
+  frage('Baustelle „'+esc(b.name)+'“ löschen?', '🗑 Löschen', function(){ rufe('baustelleLoeschen',{id:id}).then(function(d){ nachAdmin(d); toast('✓ gelöscht'); }).catch(function(f){ toast(fehlerText(f)); }); }); }
 function bsAktiv(id, an){ var b=S.alleBaustellen.filter(function(x){return x.id===id;})[0]; rufe('baustelleSpeichern',{baustelle:{id:id,name:b.name,adresse:b.adresse,aktiv:an}}).then(nachAdmin).catch(function(f){ toast(fehlerText(f)); }); }
 function bsBearbeiten(id){ var b=S.alleBaustellen.filter(function(x){return x.id===id;})[0];
   oeffneBlatt('<h2>Baustelle bearbeiten</h2><label class="f">Name</label><input class="eing" id="ebName" value="'+esc(b.name)+'"><label class="f">Adresse</label><input class="eing" id="ebAdr" value="'+esc(b.adresse||'')+'"><div id="fFehler"></div><div style="height:14px"></div>'+
