@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Zeiterfassung</title>
+<meta name="theme-color" content="#1f3a5f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Zeiterfassung">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  :root{
+    --navy:#1f3a5f; --navy2:#2c5282; --gruen:#1e8e3e; --gruenhell:#e6f4ea; --gelb:#f29900; --gelbhell:#fef7e0;
+    --rot:#d93025; --rothell:#fce8e6; --blau:#1a73e8; --blauhell:#e8f0fe; --grau:#5f6368; --linie:#e3e6ea; --bg:#f4f6f8;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;overflow-x:hidden;max-width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%;background:var(--bg);color:#1b1f24;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:16px}
+  body{min-height:100vh;padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+  button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+  input,select,textarea{font:inherit;font-size:16px}
+  .zw{display:flex;flex-direction:column;line-height:1.15}
+  .zw .de{font-size:.72em;opacity:.75;font-weight:400;margin-top:2px}
+  .zw.inl{display:inline-flex}
+  header.kopf{background:var(--navy);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 18px 16px;position:sticky;top:0;z-index:5}
+  header.kopf .zeile{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  header.kopf h1{margin:0;font-size:1.25rem}
+  header.kopf .sub{opacity:.8;font-size:.85rem;margin-top:4px}
+  .ikon{width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:20px}
+  main{padding:14px;max-width:640px;margin:0 auto}
+  .karte{background:#fff;border-radius:18px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:14px}
+  .gross{width:100%;border-radius:16px;padding:18px 14px;font-size:1.25rem;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center;gap:12px;min-height:72px}
+  .gross .de{font-size:.7em}
+  .gross:active{transform:scale(.98)}
+  .b-gruen{background:var(--gruen)} .b-rot{background:var(--rot)} .b-gelb{background:var(--gelb)} .b-navy{background:var(--navy)} .b-blau{background:var(--blau)}
+  .b-hell{background:#eef1f4;color:#1b1f24}
+  .mittel{border-radius:14px;padding:12px 14px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;min-height:54px;width:100%}
+  .reihe{display:flex;gap:10px} .reihe>*{flex:1}
+  .bs-liste{display:flex;flex-direction:column;gap:8px;margin:10px 0 14px}
+  .bs{border:2px solid var(--linie);border-radius:14px;padding:14px;text-align:left;background:#fff;display:flex;align-items:center;gap:12px}
+  .bs .punkt{width:22px;height:22px;border-radius:50%;border:2px solid #b8bec6;flex:none}
+  .bs.an{border-color:var(--gruen);background:var(--gruenhell)} .bs.an .punkt{border-color:var(--gruen);background:var(--gruen);box-shadow:inset 0 0 0 4px #fff}
+  .bs small{display:block;color:var(--grau);font-size:.8rem}
+  .titel{font-weight:700;font-size:1rem;margin:0 0 6px;color:var(--navy)}
+  .laeuft{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:6px 0 14px}
+  .uhr{font-size:3rem;font-weight:800;letter-spacing:1px;font-variant-numeric:tabular-nums;color:var(--navy)}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:99px;font-size:.8rem;font-weight:600}
+  .p-gruen{background:var(--gruenhell);color:var(--gruen)} .p-gelb{background:var(--gelbhell);color:#a86400} .p-blau{background:var(--blauhell);color:var(--blau)} .p-rot{background:var(--rothell);color:var(--rot)} .p-grau{background:#eef1f4;color:var(--grau)}
+  .eintrag{border:1px solid var(--linie);border-radius:14px;padding:12px 14px;margin-bottom:10px;background:#fff;width:100%;text-align:left;display:block}
+  .eintrag .k{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .eintrag .bsn{font-weight:700}
+  .eintrag .std{font-weight:800;color:var(--navy);white-space:nowrap}
+  .eintrag .info{color:var(--grau);font-size:.88rem;margin-top:4px}
+  .eintrag ul{margin:8px 0 0;padding-left:18px;font-size:.9rem}
+  .eintrag .taet{font-size:.9rem;margin-top:6px}
+  .leer{color:var(--grau);text-align:center;padding:12px 0;font-size:.95rem}
+  nav.unten{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--linie);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:10}
+  nav.unten button{flex:1;padding:9px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--grau);font-size:.78rem;font-weight:600}
+  nav.unten button .i{font-size:22px;line-height:1}
+  nav.unten button.an{color:var(--navy)}
+  nav.unten button .de{font-size:.68rem;font-weight:400}
+  /* Kalender */
+  .kal-kopf{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .kal-kopf .pfeil{width:48px;height:48px;border-radius:14px;background:#fff;font-size:26px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .kal-kopf .mon{text-align:center;font-weight:800;font-size:1.15rem}
+  .kal-wrap{overflow:hidden;touch-action:pan-y}
+  .kal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;transition:transform .22s ease,opacity .22s ease}
+  .kal .wt{text-align:center;font-size:.72rem;color:var(--grau);font-weight:600;padding:4px 0}
+  .tag{aspect-ratio:1/1.12;border-radius:12px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:5px 2px;position:relative;font-size:.95rem;border:2px solid transparent;min-width:0}
+  .tag .n{font-weight:700}
+  .tag .h{font-size:.72rem;font-weight:700;margin-top:auto;margin-bottom:2px;white-space:nowrap}
+  .tag.leerfeld{background:transparent}
+  .tag.we{background:#eceff2;color:#8a9097}
+  .tag.ft{background:#eceff2;color:#8a9097}
+  .tag.ft .h{font-size:.6rem;font-weight:600;text-align:center;line-height:1.05}
+  .tag.arbeit{background:#fff;border-color:#9fd3ad}
+  .tag.arbeit .h{color:var(--gruen)}
+  .tag.zu{background:var(--gruen);color:#fff;border-color:var(--gruen)} .tag.zu .h{color:#fff}
+  .tag.urlaub{background:var(--blauhell);color:var(--blau)} .tag.krank{background:var(--rothell);color:var(--rot)}
+  .tag.heute{box-shadow:0 0 0 3px var(--navy) inset}
+  .tag.laufend::after{content:"";position:absolute;top:5px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--gelb);animation:puls 1.2s infinite}
+  @keyframes puls{50%{opacity:.25}}
+  .summe{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+  .summe .kachel{flex:1;min-width:90px;background:#fff;border-radius:14px;padding:10px;text-align:center}
+  .summe .w{font-size:1.3rem;font-weight:800;color:var(--navy)}
+  .summe .l{font-size:.75rem;color:var(--grau)}
+  .legende{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0;font-size:.75rem}
+  /* Blatt (Bottom Sheet) */
+  .schleier{position:fixed;inset:0;background:rgba(15,23,32,.45);z-index:20;opacity:0;pointer-events:none;transition:opacity .2s}
+  .schleier.an{opacity:1;pointer-events:auto}
+  .blatt{position:fixed;left:0;right:0;bottom:0;max-height:92vh;overflow:auto;background:var(--bg);border-radius:22px 22px 0 0;z-index:21;transform:translateY(105%);transition:transform .25s ease;padding:8px 14px calc(20px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto;-webkit-overflow-scrolling:touch}
+  .blatt.an{transform:none}
+  .griff{width:44px;height:5px;border-radius:9px;background:#c4c9cf;margin:4px auto 10px}
+  .blatt h2{margin:0 0 12px;font-size:1.15rem;color:var(--navy)}
+  label.f{display:block;font-weight:600;font-size:.9rem;margin:12px 0 6px}
+  label.f .de{font-weight:400}
+  .eing{width:100%;padding:13px 12px;border-radius:12px;border:1px solid #cfd5dc;background:#fff}
+  textarea.eing{min-height:70px;resize:vertical}
+  .seg{display:flex;background:#e4e8ec;border-radius:14px;padding:4px;gap:4px}
+  .seg button{flex:1;padding:10px 4px;border-radius:11px;font-weight:700;font-size:.95rem}
+  .seg button.an{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);color:var(--navy)}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chips button{padding:10px 14px;border-radius:99px;background:#fff;border:1px solid #cfd5dc;font-weight:600}
+  .chips button.an{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .mat{display:grid;grid-template-columns:64px 78px 1fr 36px;gap:6px;margin-bottom:6px}
+  .mat .eing{padding:11px 8px}
+  .mat .x{color:var(--rot);font-size:20px}
+  .hinweis{background:var(--gelbhell);color:#7a4a00;border-radius:12px;padding:10px 12px;font-size:.88rem;margin-bottom:12px}
+  .fehlerbox{background:var(--rothell);color:var(--rot);border-radius:12px;padding:10px 12px;font-size:.9rem;margin-top:10px}
+  .toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));transform:translate(-50%,-140%);background:#1b1f24;color:#fff;padding:12px 18px;border-radius:14px;z-index:40;transition:transform .25s;max-width:92vw;font-size:.92rem;text-align:center}
+  .toast.an{transform:translate(-50%,0)}
+  .offline{background:var(--gelb);color:#fff;text-align:center;font-size:.85rem;padding:6px;font-weight:600}
+  /* Login */
+  .login{height:100vh;min-height:0;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:min(24px,2vh) 16px;background:var(--navy);color:#fff;margin-bottom:-76px}
+  .login h1{margin:0 0 4px;font-size:1.5rem}
+  .punkte{display:flex;gap:14px;margin:min(26px,3vh) 0}
+  .punkte span{width:16px;height:16px;border-radius:50%;border:2px solid #fff}
+  .punkte span.voll{background:#fff}
+  .tasten{display:grid;grid-template-columns:repeat(3,min(76px,10vh));gap:min(14px,2vh) min(18px,4vw)}
+  .tasten button{height:min(76px,10vh);border-radius:50%;background:rgba(255,255,255,.12);color:#fff;font-size:1.7rem;font-weight:600}
+  .tasten button:active{background:rgba(255,255,255,.3)}
+  .lade{display:flex;align-items:center;justify-content:center;min-height:60vh;color:var(--grau)}
+  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tabs button{flex:1;padding:10px;border-radius:12px;background:#fff;font-weight:700;color:var(--grau)}
+  .tabs button.an{background:var(--navy);color:#fff}
+  .zeileL{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--linie)}
+  .zeileL:last-child{border-bottom:0}
+  .klein{font-size:.82rem;color:var(--grau)}
+  a.link{color:var(--blau);font-weight:600;text-decoration:none}
+  .sel-ma{margin-bottom:10px}
+  .hidden{display:none!important}
+  html,body{overscroll-behavior:none}
+  .login{height:100dvh}
+</style>
+</head>
+<body>
+<div id="offline" class="offline hidden"></div>
+<div id="app"><div class="lade">…</div></div>
+<div id="schleier" class="schleier"></div>
+<div id="blatt" class="blatt"></div>
+<div id="toast" class="toast"></div>
+
+<script>
+/* Verbindung zur Google-Tabelle (Apps Script) */
+var API_URL = 'https://script.google.com/macros/s/AKfycbyXXwYNLvve-wmppaLomzcKkC1o7K3WqogbYJqjG6z_lXhdvB64XQmXMv6OEcsPI6gY/exec';
+window.google = { script: { run: (function mk(ok, nein) {
+  return new Proxy({}, { get: function (t, p) {
+    if (p === 'withSuccessHandler') return function (h) { return mk(h, nein); };
+    if (p === 'withFailureHandler') return function (h) { return mk(ok, h); };
+    return function () {
+      var a = [].slice.call(arguments), ctl = window.AbortController ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 30000);
+      fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ token: a[0], aktion: a[1], daten: a[2] }), signal: ctl ? ctl.signal : undefined })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (x) { clearTimeout(timer); if (ok) ok(x); }, function (e) { clearTimeout(timer); if (nein) nein(e); });
+    };
+  } });
+})(null, null) } };
+if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+</script>
+<script>
+/* ======================= Texte (Türkisch / Deutsch) ======================= */
+var TX = {
+  heute:['Bugün','Heute'], kalender:['Takvim','Kalender'], verwaltung:['Yönetim','Verwaltung'],
+  beginnen:['İşe başla','Arbeit beginnen'], pause:['Mola','Pause'], weiter:['Devam et','Weiter arbeiten'],
+  feierabend:['İş bitti','Feierabend'], bsWaehlen:['Şantiye seç','Baustelle wählen'], bsWechseln:['Şantiye değiştir','Baustelle wechseln'],
+  material:['Malzeme','Material'], km:['Kilometre','Kilometer'], taetigkeit:['Yapılan iş','Tätigkeit'],
+  beginn:['Başlangıç','Beginn'], ende:['Bitiş','Ende'], pauseMin:['Mola (dakika)','Pause (Minuten)'],
+  speichern:['Kaydet','Speichern'], loeschen:['Sil','Löschen'], abbrechen:['İptal','Abbrechen'],
+  tagSchliessen:['Günü kapat','Tag abschließen'], tagZu:['Gün kapandı','Tag abgeschlossen'], tagOeffnen:['Günü tekrar aç','Tag wieder öffnen'],
+  arbeit:['İş','Arbeit'], urlaub:['İzin','Urlaub'], krank:['Hasta','Krank'], feiertag:['Resmi tatil','Feiertag'],
+  manuell:['Elle ekle','Manuell eintragen'], abmelden:['Çıkış','Abmelden'], pinEingeben:['PIN girin','PIN eingeben'],
+  gesamt:['Toplam saat','Stunden gesamt'], tage:['İş günü','Arbeitstage'], stdKurz:['saat','Std.'],
+  laeuftSeit:['Çalışıyor','Läuft seit'], inPause:['Molada','In Pause'], kein:['Kayıt yok','Kein Eintrag'],
+  heuteGearbeitet:['Bugünkü kayıtlar','Heutige Einträge'], datum:['Tarih','Datum'], baustelle:['Şantiye','Baustelle'],
+  matHinzu:['Malzeme ekle','Material hinzufügen'], menge:['Miktar','Menge'], einheit:['Birim','Einheit'], bezeichnung:['Ne?','Bezeichnung'],
+  abwesend:['İzin / Hasta gir','Urlaub / Krank eintragen'], von:['Başlangıç günü','Von'], bis:['Bitiş günü','Bis'],
+  art:['Tür','Art'], gesperrt:['Bu ay kapatıldı – değişiklik yapılamaz','Monat abgeschlossen – keine Änderung möglich'],
+  eintragBearb:['Kaydı düzenle','Eintrag bearbeiten'], eintragNeu:['Yeni kayıt','Neuer Eintrag'], zuHeute:['Bugüne git','Zu heute'],
+  nachher:['Malzeme ve km ekle','Material & km ergänzen'], nichtJetzt:['Şimdi değil','Nicht jetzt'],
+  sicherLoeschen:['Bu kayıt silinsin mi?','Eintrag wirklich löschen?'], tagLaeuft:['Çalışma devam ediyor','Arbeit läuft noch'],
+  pauseBisher:['Mola','Pause'], offenTage:['Kapatılmamış gün','Offene Tage']
+};
+var FEHLER = {
+  PIN_FALSCH:['PIN yanlış','PIN falsch'], ZU_VIELE_VERSUCHE:['Çok fazla deneme. 15 dakika bekleyin.','Zu viele Versuche. 15 Minuten warten.'],
+  LAEUFT_SCHON:['Zaten çalışıyorsunuz','Es läuft schon eine Zeit'], BAUSTELLE_FEHLT:['Lütfen şantiye seçin','Bitte Baustelle wählen'],
+  ENDE_VOR_BEGINN:['Bitiş saati başlangıçtan önce','Ende liegt vor Beginn'], MONAT_GESPERRT:['Bu ay kapatıldı','Monat ist abgeschlossen'],
+  LAEUFT_NOCH:['Önce "İş bitti" deyin','Erst Feierabend buchen']
+};
+var TR_TAGE=['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'], DE_TAGE=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+var TR_KURZ=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'], DE_KURZ=['Mo','Di','Mi','Do','Fr','Sa','So'];
+var TR_MON=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+var DE_MON=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+var EINHEITEN=[['Stk','Adet'],['m','m'],['Pkt','Paket'],['Rolle','Rulo'],['kg','kg'],['Sack','Çuval']];
+
+/* ======================= Zustand ======================= */
+var S = { token:null, nutzer:null, baustellen:[], mitarbeiter:[], alleBaustellen:[], ansicht:'heute', kalMonat:null, ma:null,
+          monate:{}, auswahlBs:null, uhrTimer:null, adminTab:'monat', adminMonat:null, uebersicht:null };
+var LS = (function(){ try{ localStorage.setItem('_t','1'); localStorage.removeItem('_t'); return localStorage; }catch(e){ var m={}; return {getItem:function(k){return m[k]||null},setItem:function(k,v){m[k]=String(v)},removeItem:function(k){delete m[k]}}; } })();
+
+function tr(){ return S.nutzer && S.nutzer.sprache === 'tr'; }
+function L(k, cls){ var t = TX[k] || FEHLER[k] || [k,k]; return tr() ? '<span class="zw '+(cls||'')+'"><b class="tr">'+t[0]+'</b><span class="de">'+t[1]+'</span></span>' : '<span>'+t[1]+'</span>'; }
+function Lt(k){ var t = TX[k] || FEHLER[k] || [k,k]; return tr() ? t[0]+' / '+t[1] : t[1]; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function $(id){ return document.getElementById(id); }
+
+/* ======================= Zeit-Hilfen ======================= */
+function zwei(n){ return ('0'+n).slice(-2); }
+function isoD(d){ return d.getFullYear()+'-'+zwei(d.getMonth()+1)+'-'+zwei(d.getDate()); }
+function jetztZeit(){ var d=new Date(); return zwei(d.getHours())+':'+zwei(d.getMinutes()); }
+function heuteIso(){ return isoD(new Date()); }
+function minDiff(a,b){ var x=a.split(':'),y=b.split(':'); return (+y[0]*60+ +y[1])-(+x[0]*60+ +x[1]); }
+function std(e){ if(e.typ!=='A'||!e.start||!e.ende) return 0; return Math.max(0,minDiff(e.start,e.ende)-(+e.pause||0))/60; }
+function fStd(h){ var r=Math.round(h*100)/100; return String(r).replace('.',','); }
+function dObj(iso){ return new Date(iso+'T12:00:00'); }
+function monatVon(iso){ return iso.slice(0,7); }
+function monatPlus(m,n){ var d=new Date(+m.slice(0,4), +m.slice(5,7)-1+n, 1); return d.getFullYear()+'-'+zwei(d.getMonth()+1); }
+function datumText(iso){ var d=dObj(iso); return tr()
+  ? '<span class="zw"><b>'+TR_TAGE[d.getDay()]+', '+d.getDate()+' '+TR_MON[d.getMonth()]+'</b><span class="de">'+DE_TAGE[d.getDay()]+', '+d.getDate()+'. '+DE_MON[d.getMonth()]+'</span></span>'
+  : DE_TAGE[d.getDay()]+', '+d.getDate()+'. '+DE_MON[d.getMonth()]+' '+d.getFullYear(); }
+function monatText(m){ var i=+m.slice(5,7)-1, j=m.slice(0,4); return tr() ? '<span class="zw"><b>'+TR_MON[i]+' '+j+'</b><span class="de">'+DE_MON[i]+'</span></span>' : DE_MON[i]+' '+j; }
+function feiertag(iso){
+  var j=+iso.slice(0,4), fest={'01-01':'Neujahr','05-01':'Tag der Arbeit','10-03':'Tag der Dt. Einheit','11-01':'Allerheiligen','12-25':'1. Weihnachtstag','12-26':'2. Weihnachtstag'};
+  if(fest[iso.slice(5)]) return fest[iso.slice(5)];
+  var a=j%19,b=Math.floor(j/100),c=j%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mon=Math.floor((h+l-7*m+114)/31),tag=((h+l-7*m+114)%31)+1;
+  var o=new Date(j,mon-1,tag,12), bew={'-2':'Karfreitag','1':'Ostermontag','39':'Christi Himmelfahrt','50':'Pfingstmontag','60':'Fronleichnam'};
+  for(var x in bew){ var t=new Date(o); t.setDate(t.getDate()+(+x)); if(isoD(t)===iso) return bew[x]; }
+  return '';
+}
+function uuid(){ return 'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,10); }
+
+/* ======================= Server-Aufrufe (mit Offline-Warteschlange) ======================= */
+function rufe(aktion, daten){
+  return new Promise(function(ok, nein){
+    google.script.run.withSuccessHandler(function(r){
+      if(!r.ok){ if(r.fehler==='ANMELDUNG'){ abmeldenLokal(); return nein({anmeldung:true}); } return nein({fehler:r.fehler}); }
+      ok(r.daten);
+    }).withFailureHandler(function(e){ nein({netz:true, e:e}); }).api(S.token, aktion, daten);
+  });
+}
+function schlange(){ try{ return JSON.parse(LS.getItem('ze_schlange')||'[]'); }catch(e){ return []; } }
+function setzeSchlange(q){ LS.setItem('ze_schlange', JSON.stringify(q)); zeigeOffline(); }
+function zeigeOffline(){ var n=schlange().length, el=$('offline'); if(!n){ el.classList.add('hidden'); return; }
+  el.classList.remove('hidden'); el.textContent = (tr()?'İnternet yok – '+n+' kayıt sonra gönderilecek · ':'')+'Offline – '+n+' Buchung(en) werden später gesendet'; }
+/** Buchung senden; bei fehlendem Netz merken und lokal anzeigen. */
+function buchen(aktion, daten){
+  if(schlange().length){ var q=schlange(); q.push({a:aktion,d:daten}); setzeSchlange(q); lokalAnwenden(aktion,daten); render(); return Promise.resolve(); }
+  return rufe(aktion, daten).then(function(m){ monatSetzen(m); render(); }).catch(function(f){
+    if(f.netz){ var q=schlange(); q.push({a:aktion,d:daten}); setzeSchlange(q); lokalAnwenden(aktion,daten); render(); return; }
+    throw f;
+  });
+}
+var sendetGerade=false;
+function schlangeSenden(){
+  var q=schlange(); if(!q.length||sendetGerade||!S.token) return;
+  sendetGerade=true;
+  rufe(q[0].a, q[0].d).then(function(m){ q.shift(); setzeSchlange(q); monatSetzen(m); sendetGerade=false; if(q.length) schlangeSenden(); else { toast(Lt('speichern')+' ✓'); render(); } })
+  .catch(function(f){ sendetGerade=false; if(!f.netz){ q.shift(); setzeSchlange(q); toast(fehlerText(f)); render(); } });
+}
+setInterval(schlangeSenden, 20000);
+window.addEventListener('online', schlangeSenden);
+document.addEventListener('visibilitychange', function(){ if(!document.hidden){ schlangeSenden(); } });
+
+function schl(ma,m){ return ma+'|'+m; }
+function monatSetzen(m){ S.monate[schl(m.ma,m.monat)] = m; if(m.ma===S.nutzer.id) S.laufend = m.laufend; lokalSichern(); }
+function lokalSichern(){ try{ if(!S.nutzer) return; var mc={}, k=schl(S.nutzer.id, monatVon(heuteIso())); if(S.monate[k]) mc[k]=S.monate[k];
+  LS.setItem('ze_monate', JSON.stringify(mc)); LS.setItem('ze_laufend', JSON.stringify(S.laufend||null)); }catch(e){} }
+function monatDaten(ma,m){ return S.monate[schl(ma,m)]; }
+function ladeMonat(ma,m){ return rufe('monat',{ma:ma,monat:m}).then(function(d){ monatSetzen(d); return d; }); }
+
+function lokalAnwenden(aktion, d){
+  var m = monatDaten(S.nutzer.id, monatVon(d.datum || (d.eintrag&&d.eintrag.datum) || heuteIso()));
+  if(!m){ m={ma:S.nutzer.id,monat:monatVon(d.datum||d.eintrag.datum),eintraege:[],abgeschlossen:[],gesperrt:false}; monatSetzen(m); }
+  if(aktion==='stempeln'){
+    var l=S.laufend;
+    var find=function(id){ return m.eintraege.filter(function(e){return e.id===id;})[0]; };
+    var beenden=function(){ var e=find(l.id); var p=l.pause+(l.pauseStart?Math.max(0,minDiff(l.pauseStart,d.zeit)):0); if(e){ e.ende=d.zeit; e.pause=p; e.pauseStart=''; } S.laufend=null; };
+    if(d.art==='beginn'||d.art==='wechsel'){ if(l&&d.art==='wechsel') beenden(); var n={id:d.id,ma:S.nutzer.id,datum:d.datum,typ:'A',baustelle:d.baustelle,start:d.zeit,ende:'',pause:0,pauseStart:'',taetigkeit:'',material:[],km:''}; m.eintraege.push(n); S.laufend=JSON.parse(JSON.stringify(n)); }
+    else if(l){ var e=find(l.id)||{};
+      if(d.art==='pause'){ l.pauseStart=e.pauseStart=d.zeit; }
+      if(d.art==='weiter'&&l.pauseStart){ l.pause+=Math.max(0,minDiff(l.pauseStart,d.zeit)); e.pause=l.pause; l.pauseStart=e.pauseStart=''; }
+      if(d.art==='ende') beenden(); }
+  }
+  if(aktion==='eintragSpeichern'){ var x=d.eintrag; m.eintraege=m.eintraege.filter(function(e){return e.id!==x.id;}); m.eintraege.push(x); }
+  lokalSichern();
+}
+
+function fehlerText(f){ if(!f) return '?'; if(f.netz) return (tr()?'İnternet yok / ':'')+'Keine Verbindung'; var k=f.fehler||''; return FEHLER[k] ? Lt(k) : k; }
+function toast(t){ var el=$('toast'); el.textContent=t; el.classList.add('an'); clearTimeout(toast.t); toast.t=setTimeout(function(){ el.classList.remove('an'); }, 2600); }
+
+/* ======================= Start ======================= */
+function init(){
+  S.token = LS.getItem('ze_token');
+  if(!S.token){ zeigeLogin(); return; }
+  rufe('start',{}).then(function(d){ startSetzen(d); var m=monatVon(heuteIso()); return ladeMonat(S.nutzer.id,m); })
+    .then(function(){ render(); schlangeSenden(); })
+    .catch(function(f){ if(f.anmeldung) return;
+      if(f.netz && LS.getItem('ze_start')){ try{
+        startSetzen(JSON.parse(LS.getItem('ze_start')));
+        var mc=JSON.parse(LS.getItem('ze_monate')||'{}'); for(var k in mc) S.monate[k]=mc[k];
+        S.laufend=JSON.parse(LS.getItem('ze_laufend')||'null');
+        render(); toast((tr()?'İnternet yok – kayıtlar sonra gönderilir · ':'')+'Offline – Buchungen werden später gesendet'); return; }catch(e){} }
+      $('app').innerHTML='<div class="lade" style="flex-direction:column;gap:14px;padding:20px;text-align:center">'+esc(fehlerText(f))+'<button class="mittel b-navy" style="color:#fff;max-width:240px" onclick="location.reload()">Neu laden</button></div>'; });
+}
+function startSetzen(d){
+  try{ LS.setItem('ze_start', JSON.stringify(d)); }catch(e){}
+  S.nutzer=d.nutzer; S.baustellen=d.baustellen; S.mitarbeiter=d.mitarbeiter||[]; S.alleBaustellen=d.alleBaustellen||[];
+  S.ma = S.ma || S.nutzer.id; S.kalMonat = S.kalMonat || monatVon(heuteIso()); S.adminMonat = S.adminMonat || monatVon(heuteIso());
+  document.documentElement.lang = tr() ? 'tr' : 'de';
+}
+function abmeldenLokal(){ ['ze_token','ze_start','ze_monate','ze_laufend'].forEach(function(k){ LS.removeItem(k); }); S.token=null; S.nutzer=null; S.monate={}; zeigeLogin(); }
+
+/* ======================= Login ======================= */
+var pinEingabe='';
+function zeigeLogin(){
+  pinEingabe=''; schliesseBlatt();
+  $('app').innerHTML = '<div class="login"><div style="font-size:min(42px,5vh)">⚡</div><h1>Zeiterfassung</h1><div style="opacity:.85;text-align:center"><b>PIN girin</b><br><small>PIN eingeben</small></div>'+
+    '<div class="punkte" id="punkte"></div><div class="tasten">'+[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(function(z){
+      return z===''?'<span></span>':'<button onclick="pinTaste(\''+z+'\')">'+z+'</button>'; }).join('')+'</div>'+
+    '<button id="pinOk" class="mittel" style="margin-top:min(22px,2.5vh);max-width:260px;background:#fff;color:var(--navy)" onclick="pinSenden()"><b>Giriş</b>&nbsp;/ Anmelden</button>'+
+    '<div id="pinFehler" style="margin-top:14px;min-height:22px;color:#ffd2cc;text-align:center"></div></div>';
+  pinPunkte();
+}
+function pinTaste(z){ if(z==='⌫') pinEingabe=pinEingabe.slice(0,-1); else if(pinEingabe.length<8) pinEingabe+=z; pinPunkte(); $('pinFehler').textContent=''; }
+function pinPunkte(){ var n=Math.max(4,pinEingabe.length); var h=''; for(var i=0;i<n;i++) h+='<span class="'+(i<pinEingabe.length?'voll':'')+'"></span>'; $('punkte').innerHTML=h; }
+function pinSenden(){
+  if(pinEingabe.length<4) return;
+  $('pinOk').disabled=true;
+  google.script.run.withSuccessHandler(function(r){
+    $('pinOk').disabled=false;
+    if(!r.ok){ pinEingabe=''; pinPunkte(); var t=FEHLER[r.fehler]||[r.fehler,r.fehler]; $('pinFehler').innerHTML='<b>'+t[0]+'</b><br>'+t[1]; return; }
+    S.token=r.daten.token; LS.setItem('ze_token',S.token); S.ansicht='heute'; init();
+  }).withFailureHandler(function(){ $('pinOk').disabled=false; $('pinFehler').innerHTML='<b>İnternet yok</b><br>Keine Verbindung'; }).api(null,'login',{pin:pinEingabe});
+}
+
+/* ======================= Rahmen ======================= */
+function render(){
+  if(!S.nutzer) return;
+  zeigeOffline();
+  var admin = S.nutzer.rolle==='admin';
+  var kopfTitel = S.ansicht==='heute' ? L('heute') : S.ansicht==='kalender' ? L('kalender') : 'Verwaltung';
+  var html = '<header class="kopf"><div class="zeile"><h1>'+kopfTitel+'</h1><button class="ikon" onclick="menue()" aria-label="Menü">☰</button></div>'+
+    '<div class="sub">'+esc(S.nutzer.name)+'</div></header><main id="inhalt"></main>'+
+    '<nav class="unten">'+navKnopf('heute','🕒')+navKnopf('kalender','📅')+(admin?navKnopf('verwaltung','⚙️'):'')+'</nav>';
+  $('app').innerHTML = html;
+  if(S.ansicht==='heute') zeigeHeute(); else if(S.ansicht==='kalender') zeigeKalender(); else zeigeVerwaltung();
+}
+function navKnopf(id, ikon){ return '<button class="'+(S.ansicht===id?'an':'')+'" onclick="gehe(\''+id+'\')"><span class="i">'+ikon+'</span>'+(id==='verwaltung'?'<span>Verwaltung</span>':L(id))+'</button>'; }
+function gehe(id){ S.ansicht=id; if(id==='kalender'){ S.kalMonat = S.kalMonat||monatVon(heuteIso()); } render(); window.scrollTo(0,0); }
+function menue(){
+  oeffneBlatt('<h2>'+esc(S.nutzer.name)+'</h2>'+
+    '<button class="mittel b-hell" onclick="location.reload()">↻ '+(tr()?'<b>Yenile</b>&nbsp;/ Neu laden':'Neu laden')+'</button><div style="height:10px"></div>'+
+    '<button class="mittel b-rot" style="color:#fff" onclick="abmelden()">'+L('abmelden')+'</button>');
+}
+function abmelden(){ rufe('abmelden',{}).catch(function(){}).then(abmeldenLokal); }
+
+/* ======================= HEUTE ======================= */
+function bsName(id){ var b=(S.alleBaustellen.length?S.alleBaustellen:S.baustellen).filter(function(x){return x.id===id;})[0] || S.baustellen.filter(function(x){return x.id===id;})[0]; return b?b.name:'—'; }
+function zeigeHeute(){
+  var heute=heuteIso(), m=monatDaten(S.nutzer.id, monatVon(heute)) || {eintraege:[],abgeschlossen:[]};
+  var l=S.laufend, h='';
+  h+='<div class="karte" style="padding-bottom:6px"><div style="font-size:1.1rem">'+datumText(heute)+'</div></div>';
+  if(m.gesperrt) h+='<div class="hinweis">'+Lt('gesperrt')+'</div>';
+  h+='<div class="karte" id="stempel">';
+  if(!l){
+    h+='<p class="titel">'+L('bsWaehlen')+'</p>'+bsListe('waehleBs');
+    h+='<button class="gross b-gruen" onclick="stempel(\'beginn\')">▶ '+L('beginnen')+'</button>';
+  } else {
+    var inPause=!!l.pauseStart;
+    h+='<div class="laeuft"><span class="pill '+(inPause?'p-gelb':'p-gruen')+'">'+(inPause?'❚❚ '+Lt('inPause'):'● '+Lt('laeuftSeit')+' '+l.start)+'</span>'+
+       '<div class="uhr" id="uhr">'+laufzeit(l)+'</div><div style="font-weight:700">'+esc(bsName(l.baustelle))+'</div>'+
+       (l.datum!==heute?'<div class="klein">'+esc(l.datum)+'</div>':'')+'</div>';
+    h+='<div class="reihe" style="margin-bottom:10px">'+(inPause
+        ? '<button class="mittel b-gruen" style="color:#fff" onclick="stempel(\'weiter\')">▶ '+L('weiter')+'</button>'
+        : '<button class="mittel b-gelb" style="color:#fff" onclick="stempel(\'pause\')">❚❚ '+L('pause')+'</button>')+
+       '<button class="mittel b-hell" onclick="wechselDialog()">⇄ '+L('bsWechseln')+'</button></div>';
+    h+='<button class="gross b-rot" onclick="stempel(\'ende\')">■ '+L('feierabend')+'</button>';
+  }
+  h+='</div>';
+  var heuteE = m.eintraege.filter(function(e){ return e.datum===heute; });
+  h+='<div class="karte"><p class="titel">'+L('heuteGearbeitet')+'</p>'+eintragsListe(heuteE, heute, m)+'</div>';
+  $('inhalt').innerHTML=h;
+  clearInterval(S.uhrTimer);
+  if(l) S.uhrTimer=setInterval(function(){ var u=$('uhr'); if(u) u.textContent=laufzeit(S.laufend||l); }, 15000);
+  wischen($('inhalt'), function(r){ if(r<0) gehe('kalender'); });
+}
+function laufzeit(l){ if(!l) return ''; var j=jetztZeit(), sameDay=l.datum===heuteIso(); var min = sameDay ? minDiff(l.start, l.pauseStart||j) - l.pause : 0; min=Math.max(0,min); return Math.floor(min/60)+':'+zwei(min%60); }
+function bsListe(fn){
+  if(!S.baustellen.length) return '<div class="leer">'+(tr()?'Henüz şantiye yok<br>':'')+'Noch keine Baustelle angelegt</div>';
+  if(!S.auswahlBs || !S.baustellen.some(function(b){return b.id===S.auswahlBs;})) S.auswahlBs = LS.getItem('ze_letzteBs') && S.baustellen.some(function(b){return b.id===LS.getItem('ze_letzteBs');}) ? LS.getItem('ze_letzteBs') : (S.baustellen.length===1?S.baustellen[0].id:null);
+  return '<div class="bs-liste">'+S.baustellen.map(function(b){ return '<button class="bs '+(S.auswahlBs===b.id?'an':'')+'" onclick="'+fn+'(\''+b.id+'\')"><span class="punkt"></span><span><b>'+esc(b.name)+'</b>'+(b.adresse?'<small>'+esc(b.adresse)+'</small>':'')+'</span></button>'; }).join('')+'</div>';
+}
+function waehleBs(id){ S.auswahlBs=id; LS.setItem('ze_letzteBs',id); zeigeHeute(); }
+function stempel(art, bs){
+  var d={art:art, zeit:jetztZeit(), datum:(S.laufend&&art!=='beginn'&&art!=='wechsel')?S.laufend.datum:heuteIso()};
+  if(art==='beginn'||art==='wechsel'){ d.baustelle = bs||S.auswahlBs; if(!d.baustelle){ toast(Lt('BAUSTELLE_FEHLT')); return; } d.id=uuid(); d.datum=heuteIso(); }
+  var endeId = art==='ende' && S.laufend ? S.laufend.id : null;
+  buchen('stempeln', d).then(function(){
+    if(art==='ende' && endeId){ var e=findeEintrag(endeId); if(e) oeffneBlatt('<h2>✓ '+L('feierabend')+'</h2><p>'+(tr()?'<b>Malzeme veya kilometre eklemek ister misiniz?</b><br><span class="klein">Möchtest du Material oder Kilometer ergänzen?</span>':'Material oder Kilometer ergänzen?')+'</p>'+
+      '<button class="mittel b-navy" style="color:#fff" onclick="eintragForm(\''+endeId+'\')">'+L('nachher')+'</button><div style="height:8px"></div><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('nichtJetzt')+'</button>'); }
+  }).catch(function(f){ toast(fehlerText(f)); });
+}
+function wechselDialog(){
+  var vorher=S.auswahlBs;
+  oeffneBlatt('<h2>'+L('bsWechseln')+'</h2><div id="wbs">'+bsListe('wechselWahl')+'</div><button class="gross b-navy" onclick="schliesseBlatt();stempel(\'wechsel\')">⇄ '+L('bsWechseln')+'</button>');
+  S.auswahlBs = vorher;
+}
+function wechselWahl(id){ S.auswahlBs=id; LS.setItem('ze_letzteBs',id); $('wbs').innerHTML=bsListe('wechselWahl'); }
+function findeEintrag(id){ for(var k in S.monate){ var e=S.monate[k].eintraege.filter(function(x){return x.id===id;})[0]; if(e) return e; } return null; }
+
+function eintragsListe(liste, datum, m){
+  var h='';
+  liste = liste.slice().sort(function(a,b){ return (a.start||'').localeCompare(b.start||''); });
+  if(!liste.length) h+='<div class="leer">'+L('kein')+'</div>';
+  liste.forEach(function(e){
+    var darf = !m.gesperrt || S.nutzer.rolle==='admin';
+    if(e.typ!=='A'){ h+='<button class="eintrag" '+(darf?'onclick="eintragForm(\''+e.id+'\')"':'')+'><span class="pill '+(e.typ==='U'?'p-blau':'p-rot')+'">'+(e.typ==='U'?'🏖 '+Lt('urlaub'):'🤒 '+Lt('krank'))+'</span></button>'; return; }
+    var laeuft=!e.ende;
+    h+='<button class="eintrag" '+(darf?'onclick="eintragForm(\''+e.id+'\')"':'')+'><div class="k"><span class="bsn">'+esc(bsName(e.baustelle))+'</span><span class="std">'+(laeuft?'<span class="pill p-gelb">● '+e.start+'</span>':fStd(std(e))+' '+Lt('stdKurz').split(' / ').pop())+'</span></div>'+
+      '<div class="info">'+e.start+' – '+(e.ende||'…')+(e.pause?' · '+Lt('pauseBisher').split(' / ').pop()+' '+e.pause+' Min.':'')+(e.km!==''&&e.km!=null&&+e.km>0?' · '+e.km+' km':'')+'</div>'+
+      (e.taetigkeit?'<div class="taet">'+esc(e.taetigkeit)+'</div>':'')+
+      (e.material&&e.material.length?'<ul>'+e.material.map(function(x){return '<li>'+esc((x.menge?x.menge+' ':'')+(x.einheit?x.einheit+' ':'')+x.text)+'</li>';}).join('')+'</ul>':'')+'</button>';
+  });
+  var summe = liste.reduce(function(s,e){return s+std(e);},0);
+  var pw = pausenWarnung(liste); if(pw) h+='<div class="hinweis">⚠ '+pw+'</div>';
+  if(summe>0) h+='<div style="text-align:right;font-weight:800;color:var(--navy);margin:4px 2px 10px">Σ '+fStd(summe)+' '+(tr()?'saat / ':'')+'Std.</div>';
+  var zu = m.abgeschlossen && m.abgeschlossen.indexOf(datum)>=0;
+  var hatArbeit = liste.some(function(e){return e.typ==='A';});
+  var darf = !m.gesperrt || S.nutzer.rolle==='admin';
+  if(darf){
+    h+='<button class="mittel b-hell" onclick="eintragForm(null,\''+datum+'\')">＋ '+L('manuell')+'</button>';
+    if(hatArbeit){ h+='<div style="height:8px"></div>'+(zu
+      ? '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="pill p-gruen" style="padding:10px 12px">✓ '+Lt('tagZu')+'</span><button class="klein" style="text-decoration:underline" onclick="tagStatus(\''+datum+'\',false)">'+Lt('tagOeffnen')+'</button></div>'
+      : '<button class="mittel b-navy" style="color:#fff" onclick="tagStatus(\''+datum+'\',true)">✓ '+L('tagSchliessen')+'</button>'); }
+  }
+  return h;
+}
+/** Arbeitszeitgesetz: >6 Std. → 30 Min. Pause, >9 Std. → 45 Min. */
+function pausenWarnung(liste){
+  var a=liste.filter(function(e){return e.typ==='A'&&e.ende;}); if(!a.length) return '';
+  var h=a.reduce(function(s,e){return s+std(e);},0), p=a.reduce(function(s,e){return s+(+e.pause||0);},0), soll = h>9?45:(h>6?30:0);
+  if(p>=soll) return '';
+  return tr() ? '<b>Mola eksik: '+p+' dk, en az '+soll+' dk gerekli</b><br>Zu wenig Pause: '+p+' Min., mindestens '+soll+' Min. nötig'
+              : 'Zu wenig Pause: '+p+' Min. gebucht, bei '+fStd(h)+' Std. Arbeit mindestens '+soll+' Min. nötig';
+}
+function tagStatus(datum, zu){
+  var ma = S.ansicht==='kalender' ? S.ma : S.nutzer.id;
+  rufe(zu?'tagAbschliessen':'tagOeffnen',{ma:ma, datum:datum}).then(function(m){ monatSetzen(m); toast(zu?'✓ '+Lt('tagZu'):Lt('tagOeffnen')); if($('blatt').classList.contains('an')&&S.ansicht==='kalender') tagDetail(datum); render(); })
+   .catch(function(f){ toast(fehlerText(f)); });
+}
+
+/* ======================= KALENDER ======================= */
+function zeigeKalender(){
+  var mo=S.kalMonat, ma=S.ma||S.nutzer.id, d=monatDaten(ma,mo), h='';
+  if(S.nutzer.rolle==='admin' && S.mitarbeiter.length>1){
+    h+='<select class="eing sel-ma" onchange="S.ma=this.value;zeigeKalender()">'+S.mitarbeiter.map(function(x){return '<option value="'+x.id+'" '+(x.id===ma?'selected':'')+'>'+esc(x.name)+'</option>';}).join('')+'</select>';
+  }
+  h+='<div class="kal-kopf"><button class="pfeil" onclick="kalBlaettern(-1)">‹</button><div class="mon">'+monatText(mo)+'</div><button class="pfeil" onclick="kalBlaettern(1)">›</button></div>';
+  if(!d){ $('inhalt').innerHTML=h+'<div class="lade" style="min-height:200px">…</div>'; ladeMonat(ma,mo).then(function(){ if(S.ansicht==='kalender'&&S.kalMonat===mo) zeigeKalender(); }).catch(function(f){ toast(fehlerText(f)); }); return; }
+  h+='<div class="kal-wrap" id="kalwrap"><div class="kal" id="kal">';
+  (tr()?TR_KURZ:DE_KURZ).forEach(function(w,i){ h+='<div class="wt">'+w+(tr()?'<br><span style="font-weight:400;opacity:.7">'+DE_KURZ[i]+'</span>':'')+'</div>'; });
+  var j=+mo.slice(0,4), m=+mo.slice(5,7), erster=new Date(j,m-1,1), versatz=(erster.getDay()+6)%7, tage=new Date(j,m,0).getDate(), heute=heuteIso();
+  for(var i=0;i<versatz;i++) h+='<div class="tag leerfeld"></div>';
+  var lauf = ma===S.nutzer.id ? S.laufend : (d.laufend||null);
+  for(var t=1;t<=tage;t++){
+    var iso=mo+'-'+zwei(t), dt=new Date(j,m-1,t), we=dt.getDay()===0||dt.getDay()===6, ft=feiertag(iso);
+    var es=d.eintraege.filter(function(e){return e.datum===iso;});
+    var u=es.some(function(e){return e.typ==='U';}), k=es.some(function(e){return e.typ==='K';});
+    var stunden=es.reduce(function(s,e){return s+std(e);},0), arbeit=es.some(function(e){return e.typ==='A';});
+    var zu=d.abgeschlossen.indexOf(iso)>=0;
+    var kl=['tag']; var unten='';
+    if(u){ kl.push('urlaub'); unten=tr()?'İzin':'Urlaub'; }
+    else if(k){ kl.push('krank'); unten=tr()?'Hasta':'Krank'; }
+    else if(arbeit){ kl.push(zu?'zu':'arbeit'); unten=(stunden?fStd(stunden):'…')+(zu?' ✓':''); }
+    else if(ft){ kl.push('ft'); unten=tr()?'Tatil':'Feiertag'; }
+    else if(we) kl.push('we');
+    if(iso===heute) kl.push('heute');
+    if(lauf && lauf.datum===iso) kl.push('laufend');
+    h+='<button class="'+kl.join(' ')+'" onclick="tagDetail(\''+iso+'\')"><span class="n">'+t+'</span><span class="h">'+esc(unten)+'</span></button>';
+  }
+  h+='</div></div>';
+  var s=d.eintraege.reduce(function(a,e){ if(e.typ==='U')a.u++; else if(e.typ==='K')a.k++; else {a.h+=std(e); a.t[e.datum]=1;} return a; },{h:0,u:0,k:0,t:{}});
+  h+='<div class="summe"><div class="kachel"><div class="w">'+fStd(s.h)+'</div><div class="l">'+Lt('gesamt')+'</div></div><div class="kachel"><div class="w">'+Object.keys(s.t).length+'</div><div class="l">'+Lt('tage')+'</div></div>'+
+     '<div class="kachel"><div class="w">'+s.u+'</div><div class="l">'+Lt('urlaub')+'</div></div><div class="kachel"><div class="w">'+s.k+'</div><div class="l">'+Lt('krank')+'</div></div></div>';
+  if(d.gesperrt) h+='<div class="hinweis">🔒 '+Lt('gesperrt')+'</div>';
+  if(mo!==monatVon(heute)) h+='<button class="mittel b-hell" onclick="S.kalMonat=monatVon(heuteIso());zeigeKalender()">'+L('zuHeute')+'</button><div style="height:8px"></div>';
+  if(!d.gesperrt||S.nutzer.rolle==='admin') h+='<button class="mittel b-hell" onclick="abwesenheitForm()">🏖 '+L('abwesend')+'</button>';
+  h+='<div class="legende"><span class="pill p-gruen">■ '+Lt('tagZu')+'</span><span class="pill" style="background:#fff;border:2px solid #9fd3ad;color:var(--gruen)">'+(tr()?'Açık / ':'')+'Offen</span><span class="pill p-blau">'+Lt('urlaub')+'</span><span class="pill p-rot">'+Lt('krank')+'</span><span class="pill p-grau">'+Lt('feiertag')+'</span></div>';
+  $('inhalt').innerHTML=h;
+  wischen($('kalwrap'), kalBlaettern);
+}
+function kalBlaettern(r){
+  var k=$('kal'); S.kalMonat=monatPlus(S.kalMonat, r>0?1:-1);
+  if(k){ k.style.transform='translateX('+(r>0?-40:40)+'px)'; k.style.opacity='0'; setTimeout(zeigeKalender,140); } else zeigeKalender();
+}
+/** Wischgeste: links = +1, rechts = -1 */
+function wischen(el, fn){
+  if(!el) return; var x0=null,y0=null;
+  el.addEventListener('touchstart',function(e){ x0=e.touches[0].clientX; y0=e.touches[0].clientY; },{passive:true});
+  el.addEventListener('touchend',function(e){ if(x0===null) return; var dx=e.changedTouches[0].clientX-x0, dy=e.changedTouches[0].clientY-y0; x0=null;
+    if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5) fn(dx<0?1:-1); },{passive:true});
+}
+function tagDetail(iso){
+  var ma=S.ansicht==='kalender'?(S.ma||S.nutzer.id):S.nutzer.id, d=monatDaten(ma,monatVon(iso));
+  if(!d) return;
+  var ft=feiertag(iso), es=d.eintraege.filter(function(e){return e.datum===iso;});
+  var h='<h2>'+datumText(iso)+'</h2>';
+  if(ft) h+='<div style="margin-bottom:10px"><span class="pill p-grau">🎉 '+Lt('feiertag')+': '+esc(ft)+'</span></div>';
+  if(d.gesperrt && S.nutzer.rolle!=='admin') h+='<div class="hinweis">🔒 '+Lt('gesperrt')+'</div>';
+  h+=eintragsListe(es, iso, d);
+  oeffneBlatt(h);
+}
+
+/* ======================= Eintrag bearbeiten ======================= */
+var F=null;
+function eintragForm(id, datum){
+  var e = id ? JSON.parse(JSON.stringify(findeEintrag(id))) : null;
+  var ma = S.ansicht==='kalender' ? (S.ma||S.nutzer.id) : S.nutzer.id;
+  F = e || {id:null, ma:ma, datum:datum||heuteIso(), typ:'A', baustelle:S.auswahlBs||(S.baustellen[0]&&S.baustellen[0].id)||'', start:'07:00', ende:'16:00', pause:30, taetigkeit:'', material:[], km:''};
+  if(!F.material) F.material=[];
+  if(!F.material.length) F.material.push({menge:'',einheit:'Stk',text:''});
+  zeichneForm();
+}
+function zeichneForm(){
+  var e=F, h='<h2>'+L(e.id?'eintragBearb':'eintragNeu')+'</h2>';
+  h+='<div class="seg">'+['A','U','K'].map(function(t){ return '<button class="'+(e.typ===t?'an':'')+'" onclick="formLesen();F.typ=\''+t+'\';zeichneForm()">'+L(t==='A'?'arbeit':t==='U'?'urlaub':'krank')+'</button>'; }).join('')+'</div>';
+  h+='<label class="f">'+L('datum','inl')+'</label><input type="date" class="eing" id="fDatum" value="'+e.datum+'">';
+  if(e.typ==='A'){
+    var laeuft = e.id && !e.ende && S.laufend && S.laufend.id===e.id;
+    h+='<label class="f">'+L('baustelle','inl')+'</label><select class="eing" id="fBs">'+(S.alleBaustellen.length?S.alleBaustellen:S.baustellen).filter(function(b){return b.aktiv!==false||b.id===e.baustelle;}).map(function(b){return '<option value="'+b.id+'" '+(b.id===e.baustelle?'selected':'')+'>'+esc(b.name)+'</option>';}).join('')+'</select>';
+    h+='<div class="reihe"><div><label class="f">'+L('beginn','inl')+'</label><input type="time" class="eing" id="fStart" value="'+(e.start||'')+'"></div>'+
+       '<div><label class="f">'+L('ende','inl')+'</label><input type="time" class="eing" id="fEnde" value="'+(e.ende||'')+'" '+(laeuft?'placeholder="…"':'')+'></div></div>';
+    h+='<label class="f">'+L('pauseMin','inl')+'</label><div class="chips" id="fPauseChips">'+[0,15,30,45,60].map(function(p){return '<button class="'+(+e.pause===p?'an':'')+'" onclick="formLesen();F.pause='+p+';zeichneForm()">'+p+'</button>';}).join('')+
+       '<input type="number" inputmode="numeric" class="eing" id="fPause" style="width:90px;padding:9px" value="'+(+e.pause||0)+'"></div>';
+    h+='<label class="f">'+L('taetigkeit','inl')+'</label><textarea class="eing" id="fTaet" placeholder="'+(tr()?'örn. Priz montajı / ':'')+'z. B. Steckdosen gesetzt">'+esc(e.taetigkeit||'')+'</textarea>';
+    h+='<label class="f">'+L('material','inl')+'</label><div id="fMat">'+e.material.map(function(m,i){
+      return '<div class="mat"><input class="eing" inputmode="decimal" placeholder="'+(tr()?'Miktar':'Menge')+'" value="'+esc(m.menge)+'" data-i="'+i+'" data-k="menge">'+
+        '<select class="eing" data-i="'+i+'" data-k="einheit">'+EINHEITEN.map(function(x){return '<option value="'+x[0]+'" '+(m.einheit===x[0]?'selected':'')+'>'+(tr()&&x[1]!==x[0]?x[1]+' / ':'')+x[0]+'</option>';}).join('')+'</select>'+
+        '<input class="eing" placeholder="'+(tr()?'NYM 3x1,5':'z. B. NYM 3x1,5')+'" value="'+esc(m.text)+'" data-i="'+i+'" data-k="text">'+
+        '<button class="x" onclick="formLesen();F.material.splice('+i+',1);if(!F.material.length)F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">✕</button></div>'; }).join('')+'</div>'+
+      '<button class="mittel b-hell" style="min-height:44px" onclick="formLesen();F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">＋ '+L('matHinzu')+'</button>';
+    h+='<label class="f">'+L('km','inl')+'</label><input type="number" inputmode="decimal" class="eing" id="fKm" value="'+(e.km===''||e.km==null?'':e.km)+'" placeholder="0">';
+  }
+  h+='<div id="fFehler"></div><div style="height:14px"></div><button class="gross b-navy" onclick="formSpeichern()">💾 '+L('speichern')+'</button><div style="height:8px"></div>';
+  h+='<div class="reihe"><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>'+(e.id?'<button class="mittel" style="background:var(--rothell);color:var(--rot)" onclick="formLoeschen()">🗑 '+L('loeschen')+'</button>':'')+'</div>';
+  oeffneBlatt(h, true);
+}
+function formLesen(){
+  if(!F) return; var v=function(id){ var el=$(id); return el?el.value:undefined; };
+  if(v('fDatum')!==undefined) F.datum=v('fDatum');
+  if(F.typ!=='A') return;
+  if(v('fBs')!==undefined) F.baustelle=v('fBs'); if(v('fStart')!==undefined) F.start=v('fStart'); if(v('fEnde')!==undefined) F.ende=v('fEnde');
+  if(v('fPause')!==undefined) F.pause=+v('fPause')||0; if(v('fTaet')!==undefined) F.taetigkeit=v('fTaet'); if(v('fKm')!==undefined) F.km=v('fKm');
+  document.querySelectorAll('#fMat [data-i]').forEach(function(el){ F.material[+el.dataset.i][el.dataset.k]=el.value; });
+}
+function formSpeichern(){
+  formLesen(); var e=JSON.parse(JSON.stringify(F));
+  if(!e.datum){ return fFehler('Datum'); }
+  if(e.typ==='A'){
+    if(!e.baustelle) return fFehler(Lt('BAUSTELLE_FEHLT'));
+    if(!e.start) return fFehler(Lt('beginn')+' ?');
+    if(e.ende && minDiff(e.start,e.ende)<=0) return fFehler(Lt('ENDE_VOR_BEGINN'));
+    e.material=e.material.filter(function(m){return String(m.text||'').trim();});
+    e.km = e.km===''?'':String(e.km).replace(',','.');
+  }
+  var neu=!e.id; if(neu) e.id=uuid();
+  var ma=e.ma||S.nutzer.id;
+  var ziel = (neu && ma===S.nutzer.id) ? buchen('eintragSpeichern',{eintrag:e}) : rufe('eintragSpeichern',{eintrag:e}).then(function(m){ monatSetzen(m); });
+  ziel.then(function(){
+    // falls der laufende Eintrag bearbeitet wurde
+    if(S.laufend && S.laufend.id===e.id && e.ende) S.laufend=null;
+    schliesseBlatt(); toast('✓ '+Lt('speichern')); render();
+  }).catch(function(f){ fFehler(fehlerText(f)); });
+}
+function fFehler(t){ $('fFehler').innerHTML='<div class="fehlerbox">'+esc(t)+'</div>'; }
+function formLoeschen(){ var f=F; frage(L('sicherLoeschen'), L('loeschen'), function(){ F=f; loescheJetzt(); }); }
+function loescheJetzt(){
+  rufe('eintragLoeschen',{id:F.id, ma:F.ma, monat:monatVon(F.datum)}).then(function(m){ monatSetzen(m); if(S.laufend&&S.laufend.id===F.id) S.laufend=null; schliesseBlatt(); toast('🗑'); render(); })
+    .catch(function(f){ fFehler(fehlerText(f)); });
+}
+
+function abwesenheitForm(){
+  var h='<h2>'+L('abwesend')+'</h2><div class="seg" id="abwTyp"><button class="an" data-t="U" onclick="abwTyp(this)">🏖 '+L('urlaub')+'</button><button data-t="K" onclick="abwTyp(this)">🤒 '+L('krank')+'</button></div>'+
+    '<div class="reihe"><div><label class="f">'+L('von','inl')+'</label><input type="date" class="eing" id="aVon" value="'+heuteIso()+'"></div><div><label class="f">'+L('bis','inl')+'</label><input type="date" class="eing" id="aBis" value="'+heuteIso()+'"></div></div>'+
+    '<p class="klein">'+(tr()?'Hafta sonu ve resmi tatiller otomatik atlanır.<br>':'')+'Wochenenden und Feiertage werden automatisch übersprungen.</p>'+
+    '<div id="fFehler"></div><button class="gross b-blau" onclick="abwSpeichern()">💾 '+L('speichern')+'</button><div style="height:8px"></div><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>';
+  oeffneBlatt(h);
+}
+function abwTyp(b){ document.querySelectorAll('#abwTyp button').forEach(function(x){x.classList.remove('an');}); b.classList.add('an'); }
+function abwSpeichern(){
+  var typ=document.querySelector('#abwTyp .an').dataset.t, von=$('aVon').value, bis=$('aBis').value;
+  if(!von||!bis||bis<von) return fFehler(Lt('ENDE_VOR_BEGINN'));
+  rufe('abwesenheit',{ma:S.ma||S.nutzer.id, typ:typ, von:von, bis:bis}).then(function(m){ monatSetzen(m);
+    var bisM=monatVon(bis); if(bisM!==monatVon(von)) delete S.monate[schl(m.ma,bisM)];
+    schliesseBlatt(); toast('✓'); render(); }).catch(function(f){ fFehler(fehlerText(f)); });
+}
+
+/* ======================= VERWALTUNG (nur Admin) ======================= */
+function zeigeVerwaltung(){
+  var h='<div class="tabs">'+[['monat','Monat'],['baustellen','Baustellen'],['team','Team']].map(function(t){return '<button class="'+(S.adminTab===t[0]?'an':'')+'" onclick="S.adminTab=\''+t[0]+'\';zeigeVerwaltung()">'+t[1]+'</button>';}).join('')+'</div>';
+  if(S.adminTab==='monat'){
+    h+='<div class="kal-kopf"><button class="pfeil" onclick="S.adminMonat=monatPlus(S.adminMonat,-1);S.uebersicht=null;zeigeVerwaltung()">‹</button><div class="mon">'+DE_MON[+S.adminMonat.slice(5,7)-1]+' '+S.adminMonat.slice(0,4)+'</div><button class="pfeil" onclick="S.adminMonat=monatPlus(S.adminMonat,1);S.uebersicht=null;zeigeVerwaltung()">›</button></div>';
+    if(!S.uebersicht || S.uebersicht.monat!==S.adminMonat){
+      $('inhalt').innerHTML=h+'<div class="lade" style="min-height:200px">…</div>';
+      var mo=S.adminMonat; rufe('uebersicht',{monat:mo}).then(function(u){ S.uebersicht={monat:mo,liste:u}; if(S.ansicht==='verwaltung') zeigeVerwaltung(); }).catch(function(f){ toast(fehlerText(f)); });
+      return;
+    }
+    S.uebersicht.liste.forEach(function(p){
+      h+='<div class="karte"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:1.05rem">'+esc(p.name)+'</b>'+(p.gesperrt?'<span class="pill p-gruen">🔒 abgerechnet</span>':'')+'</div>'+
+        '<div class="summe" style="margin:10px 0"><div class="kachel" style="background:var(--bg)"><div class="w">'+fStd(p.stunden)+'</div><div class="l">Stunden</div></div><div class="kachel" style="background:var(--bg)"><div class="w">'+p.tage+'</div><div class="l">Arbeitstage</div></div>'+
+        '<div class="kachel" style="background:var(--bg)"><div class="w">'+p.urlaub+' / '+p.krank+'</div><div class="l">Urlaub / Krank</div></div><div class="kachel" style="background:var(--bg)"><div class="w">'+fStd(p.km)+'</div><div class="l">km</div></div></div>'+
+        (p.offen?'<div class="hinweis">⚠ '+p.offen+' Arbeitstag(e) noch nicht abgeschlossen</div>':'')+
+        (p.pausenTage&&p.pausenTage.length?'<div class="hinweis">⚠ Zu wenig Pause an '+p.pausenTage.length+' Tag(en): '+p.pausenTage.map(function(t){return t.slice(8,10)+'.'+t.slice(5,7)+'.';}).join(', ')+'</div>':'')+
+        '<div class="reihe"><button class="mittel b-hell" onclick="S.ma=\''+p.id+'\';S.kalMonat=S.adminMonat;gehe(\'kalender\')">📅 Kalender</button>'+
+        '<button class="mittel b-navy" style="color:#fff" id="mb_'+p.id+'" onclick="bericht(\''+p.id+'\')">📄 '+(p.gesperrt?'Neu erstellen':'Stundenzettel')+'</button></div>'+
+        (p.gesperrt?'<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px"><a class="link" href="'+p.pdfUrl+'" target="_blank">PDF öffnen</a><a class="link" href="'+p.tabelleUrl+'" target="_blank">Tabelle öffnen</a><button class="link" style="color:var(--rot)" onclick="entsperren(\''+p.id+'\')">Entsperren</button></div>':'')+
+        '</div>';
+    });
+    h+='<p class="klein">Der Stundenzettel wird als Tabelle + PDF in Google Drive unter „Zeiterfassung/Monatsberichte“ gespeichert. Danach ist der Monat für den Mitarbeiter gesperrt.</p>';
+  }
+  if(S.adminTab==='baustellen'){
+    h+='<div class="karte"><p class="titel">Neue Baustelle</p><input class="eing" id="nbName" placeholder="Name / Kunde (z. B. Sonnenhagen Hannover)"><div style="height:8px"></div><input class="eing" id="nbAdr" placeholder="Adresse (optional)"><div style="height:10px"></div><button class="mittel b-gruen" style="color:#fff" onclick="bsSpeichern()">＋ Anlegen</button></div>';
+    h+='<div class="karte">'+(S.alleBaustellen.length?S.alleBaustellen.map(function(b){ return '<div class="zeileL"><div><b style="'+(b.aktiv?'':'opacity:.45')+'">'+esc(b.name)+'</b>'+(b.adresse?'<div class="klein">'+esc(b.adresse)+'</div>':'')+'</div>'+
+      '<div style="display:flex;gap:6px"><button class="pill p-grau" onclick="bsBearbeiten(\''+b.id+'\')">✎</button><button class="pill '+(b.aktiv?'p-gruen':'p-grau')+'" onclick="bsAktiv(\''+b.id+'\','+(!b.aktiv)+')">'+(b.aktiv?'aktiv':'beendet')+'</button></div></div>'; }).join(''):'<div class="leer">Noch keine Baustellen</div>')+'</div>';
+    h+='<p class="klein">„Beendet“ blendet die Baustelle in Ahmets Auswahl aus; alte Einträge bleiben erhalten.</p>';
+  }
+  if(S.adminTab==='team'){
+    h+='<div class="karte">'+S.mitarbeiter.map(function(m){ return '<div class="zeileL"><div><b style="'+(m.aktiv?'':'opacity:.45')+'">'+esc(m.name)+'</b><div class="klein">'+(m.rolle==='admin'?'Admin':'Mitarbeiter')+' · '+(m.sprache==='tr'?'Türkisch + Deutsch':'Deutsch')+'</div></div><button class="pill p-grau" onclick="maForm(\''+m.id+'\')">✎ Bearbeiten</button></div>'; }).join('')+'</div>'+
+       '<button class="mittel b-hell" onclick="maForm(null)">＋ Mitarbeiter hinzufügen</button>';
+  }
+  $('inhalt').innerHTML=h;
+}
+function bericht(id){
+  var b=$('mb_'+id); b.disabled=true; b.innerHTML='⏳ wird erstellt…';
+  rufe('monatsbericht',{ma:id, monat:S.adminMonat}).then(function(r){ S.uebersicht={monat:S.adminMonat,liste:r.uebersicht}; zeigeVerwaltung(); toast('✓ Stundenzettel erstellt');
+      oeffneBlatt('<h2>✓ Stundenzettel erstellt</h2><p>Gespeichert in Google Drive unter <b>Zeiterfassung › Monatsberichte</b>.</p><a class="mittel b-navy" style="color:#fff;text-decoration:none" href="'+r.pdfUrl+'" target="_blank">📄 PDF öffnen</a><div style="height:8px"></div><a class="mittel b-hell" style="text-decoration:none" href="'+r.tabelleUrl+'" target="_blank">Tabelle öffnen</a>'); })
+   .catch(function(f){ b.disabled=false; b.innerHTML='📄 Stundenzettel'; oeffneBlatt('<h2>Noch nicht möglich</h2><div class="fehlerbox">'+esc(fehlerText(f))+'</div><div style="height:12px"></div><button class="mittel b-hell" onclick="schliesseBlatt()">OK</button>'); });
+}
+function entsperren(id){ frage('Monat wieder freigeben? Der Mitarbeiter kann dann wieder ändern.', 'Entsperren', function(){ entsperrenJetzt(id); }); }
+function entsperrenJetzt(id){
+  rufe('monatEntsperren',{ma:id, monat:S.adminMonat}).then(function(u){ S.uebersicht={monat:S.adminMonat,liste:u}; delete S.monate[schl(id,S.adminMonat)]; zeigeVerwaltung(); }).catch(function(f){ toast(fehlerText(f)); }); }
+function nachAdmin(d){ startSetzen(d); zeigeVerwaltung(); }
+function bsSpeichern(){ var n=$('nbName').value.trim(); if(!n) return toast('Name fehlt'); rufe('baustelleSpeichern',{baustelle:{name:n, adresse:$('nbAdr').value}}).then(function(d){ nachAdmin(d); toast('✓ Baustelle angelegt – erscheint sofort bei allen'); }).catch(function(f){ toast(fehlerText(f)); }); }
+function bsAktiv(id, an){ var b=S.alleBaustellen.filter(function(x){return x.id===id;})[0]; rufe('baustelleSpeichern',{baustelle:{id:id,name:b.name,adresse:b.adresse,aktiv:an}}).then(nachAdmin).catch(function(f){ toast(fehlerText(f)); }); }
+function bsBearbeiten(id){ var b=S.alleBaustellen.filter(function(x){return x.id===id;})[0];
+  oeffneBlatt('<h2>Baustelle bearbeiten</h2><label class="f">Name</label><input class="eing" id="ebName" value="'+esc(b.name)+'"><label class="f">Adresse</label><input class="eing" id="ebAdr" value="'+esc(b.adresse||'')+'"><div id="fFehler"></div><div style="height:14px"></div>'+
+   '<button class="gross b-navy" onclick="rufe(\'baustelleSpeichern\',{baustelle:{id:\''+id+'\',name:$(\'ebName\').value,adresse:$(\'ebAdr\').value,aktiv:'+b.aktiv+'}}).then(function(d){schliesseBlatt();nachAdmin(d);}).catch(function(f){fFehler(fehlerText(f));})">Speichern</button>'); }
+function maForm(id){
+  var m = id ? S.mitarbeiter.filter(function(x){return x.id===id;})[0] : {name:'',rolle:'mitarbeiter',sprache:'tr',aktiv:true};
+  oeffneBlatt('<h2>'+(id?'Mitarbeiter bearbeiten':'Neuer Mitarbeiter')+'</h2><label class="f">Name</label><input class="eing" id="mName" value="'+esc(m.name)+'">'+
+    '<label class="f">Sprache der App</label><select class="eing" id="mSpr"><option value="tr" '+(m.sprache==='tr'?'selected':'')+'>Türkisch mit Deutsch darunter</option><option value="de" '+(m.sprache!=='tr'?'selected':'')+'>Deutsch</option></select>'+
+    '<label class="f">Rolle</label><select class="eing" id="mRolle"><option value="mitarbeiter" '+(m.rolle!=='admin'?'selected':'')+'>Mitarbeiter (sieht nur sich selbst)</option><option value="admin" '+(m.rolle==='admin'?'selected':'')+'>Admin (sieht alles)</option></select>'+
+    '<label class="f">'+(id?'Neue PIN (leer lassen = unverändert)':'PIN (4–8 Ziffern)')+'</label><input class="eing" id="mPin" inputmode="numeric" maxlength="8" autocomplete="off">'+
+    (id?'<label class="f" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="mAktiv" '+(m.aktiv?'checked':'')+' style="width:22px;height:22px"> Zugang aktiv</label>':'')+
+    '<div id="fFehler"></div><div style="height:14px"></div><button class="gross b-navy" onclick="maSpeichern('+(id?'\''+id+'\'':'null')+')">Speichern</button>');
+}
+function maSpeichern(id){
+  var d={id:id, name:$('mName').value, sprache:$('mSpr').value, rolle:$('mRolle').value, pin:$('mPin').value.trim(), aktiv: id?$('mAktiv').checked:true};
+  rufe('mitarbeiterSpeichern',{mitarbeiter:d}).then(function(r){ schliesseBlatt(); nachAdmin(r); toast('✓ gespeichert'); }).catch(function(f){ fFehler(fehlerText(f)); });
+}
+
+/* ======================= Blatt (von unten) ======================= */
+var _frageJa=null;
+function frage(text, jaText, ja){ _frageJa=ja;
+  oeffneBlatt('<h2 style="margin-bottom:18px">'+text+'</h2><button class="gross b-rot" onclick="var f=_frageJa;schliesseBlatt();f()">'+jaText+'</button><div style="height:8px"></div><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>'); }
+function oeffneBlatt(html, form){
+  var b=$('blatt'); b.innerHTML='<div class="griff"></div>'+html; b.scrollTop=0;
+  $('schleier').classList.add('an'); b.classList.add('an');
+  if(!form){ var y0=null; b.ontouchstart=function(e){ y0 = b.scrollTop<=0 ? e.touches[0].clientY : null; };
+    b.ontouchend=function(e){ if(y0!==null && e.changedTouches[0].clientY-y0>90) schliesseBlatt(); y0=null; }; } else { b.ontouchstart=b.ontouchend=null; }
+}
+function schliesseBlatt(){ $('blatt').classList.remove('an'); $('schleier').classList.remove('an'); F=null; }
+$('schleier').onclick=schliesseBlatt;
+
+init();
+</script>
+</body>
+</html>
