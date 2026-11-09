@@ -64,7 +64,12 @@
   .leer{color:var(--grau);text-align:center;padding:12px 0;font-size:.95rem}
   nav.unten{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--linie);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:10}
   nav.unten button{flex:1;padding:9px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--grau);font-size:.78rem;font-weight:600}
-  nav.unten button .i{font-size:22px;line-height:1}
+  nav.unten button .i{font-size:22px;line-height:1;position:relative}
+  .badge{position:absolute;top:-6px;right:-12px;background:var(--rot);color:#fff;border-radius:99px;font-size:.68rem;font-weight:800;padding:1px 6px;min-width:18px}
+  .msg{border:1px solid var(--linie);border-radius:14px;padding:12px 14px;margin-bottom:10px;background:#fff}
+  .msg.neu{border:2px solid var(--gelb);background:var(--gelbhell)}
+  .msg .kopfz{display:flex;justify-content:space-between;gap:8px;font-size:.82rem;color:var(--grau)}
+  .msg .t{white-space:pre-wrap;margin:6px 0 4px;font-size:1rem}
   nav.unten button.an{color:var(--navy)}
   nav.unten button .de{font-size:.68rem;font-weight:400}
   /* Kalender */
@@ -177,6 +182,8 @@ if ('serviceWorker' in navigator) window.addEventListener('load', function () { 
 /* ======================= Texte (Türkisch / Deutsch) ======================= */
 var TX = {
   heute:['Bugün','Heute'], kalender:['Takvim','Kalender'], verwaltung:['Yönetim','Verwaltung'],
+  nachrichten:['Mesajlar','Nachrichten'], neueNachricht:['Yeni mesaj','Neue Nachricht'], vorfall:['Olay','Vorfall'], sonstiges:['Diğer','Sonstiges'],
+  senden:['Gönder','Senden'], erledigt:['Tamam','Erledigt'], nachrichtText:['Mesaj','Nachricht'], anChef:['Şefe','An Chef'], keineNachr:['Mesaj yok','Keine Nachrichten'],
   beginnen:['İşe başla','Arbeit beginnen'], pause:['Mola','Pause'], weiter:['Devam et','Weiter arbeiten'],
   feierabend:['İş bitti','Feierabend'], bsWaehlen:['Şantiye seç','Baustelle wählen'], bsWechseln:['Şantiye değiştir','Baustelle wechseln'],
   material:['Malzeme','Material'], km:['Kilometre','Kilometer'], taetigkeit:['Yapılan iş','Tätigkeit'],
@@ -328,6 +335,7 @@ function init(){
       $('app').innerHTML='<div class="lade" style="flex-direction:column;gap:14px;padding:20px;text-align:center">'+esc(fehlerText(f))+'<button class="mittel b-navy" style="color:#fff;max-width:240px" onclick="location.reload()">Neu laden</button></div>'; });
 }
 function startSetzen(d){
+  if(d.ungelesen!==undefined) S.ungelesen=d.ungelesen;
   try{ LS.setItem('ze_start', JSON.stringify(d)); LS.setItem('ze_sprache', d.nutzer.sprache||'de'); }catch(e){}
   S.nutzer=d.nutzer; S.baustellen=d.baustellen; S.mitarbeiter=d.mitarbeiter||[]; S.alleBaustellen=d.alleBaustellen||[];
   S.ma = S.ma || S.nutzer.id; S.kalMonat = S.kalMonat || monatVon(heuteIso()); S.adminMonat = S.adminMonat || monatVon(heuteIso());
@@ -366,14 +374,14 @@ function render(){
   if(!S.nutzer) return;
   zeigeOffline();
   var admin = S.nutzer.rolle==='admin';
-  var kopfTitel = S.ansicht==='heute' ? L('heute') : S.ansicht==='kalender' ? L('kalender') : 'Verwaltung';
+  var kopfTitel = S.ansicht==='heute' ? L('heute') : S.ansicht==='kalender' ? L('kalender') : S.ansicht==='nachrichten' ? L('nachrichten') : 'Verwaltung';
   var html = '<header class="kopf"><div class="zeile"><h1>'+kopfTitel+'</h1><button class="ikon" onclick="menue()" aria-label="Menü">☰</button></div>'+
     '<div class="sub">'+esc(S.nutzer.name)+'</div></header><main id="inhalt"></main>'+
-    '<nav class="unten">'+navKnopf('heute','🕒')+navKnopf('kalender','📅')+(admin?navKnopf('verwaltung','⚙️'):'')+'</nav>';
+    '<nav class="unten">'+navKnopf('heute','🕒')+navKnopf('kalender','📅')+navKnopf('nachrichten','💬')+(admin?navKnopf('verwaltung','⚙️'):'')+'</nav>';
   $('app').innerHTML = html;
-  if(S.ansicht==='heute') zeigeHeute(); else if(S.ansicht==='kalender') zeigeKalender(); else zeigeVerwaltung();
+  if(S.ansicht==='heute') zeigeHeute(); else if(S.ansicht==='kalender') zeigeKalender(); else if(S.ansicht==='nachrichten') zeigeNachrichten(); else zeigeVerwaltung();
 }
-function navKnopf(id, ikon){ return '<button class="'+(S.ansicht===id?'an':'')+'" onclick="gehe(\''+id+'\')"><span class="i">'+ikon+'</span>'+(id==='verwaltung'?'<span>Verwaltung</span>':L(id))+'</button>'; }
+function navKnopf(id, ikon){ return '<button class="'+(S.ansicht===id?'an':'')+'" onclick="gehe(\''+id+'\')"><span class="i">'+ikon+(id==='nachrichten'&&S.ungelesen?'<span class="badge">'+S.ungelesen+'</span>':'')+'</span>'+(id==='verwaltung'?'<span>Verwaltung</span>':L(id))+'</button>'; }
 function gehe(id){ S.ansicht=id; if(id==='kalender'){ S.kalMonat = S.kalMonat||monatVon(heuteIso()); } render(); window.scrollTo(0,0); }
 function menue(){
   oeffneBlatt('<h2>'+esc(S.nutzer.name)+'</h2>'+
@@ -745,6 +753,67 @@ function oeffneBlatt(html, form){
 }
 function schliesseBlatt(){ $('blatt').classList.remove('an'); $('schleier').classList.remove('an'); F=null; }
 $('schleier').onclick=schliesseBlatt;
+
+/* ======================= NACHRICHTEN ======================= */
+var ARTEN={material:['📦','material'], vorfall:['⚠️','vorfall'], sonstiges:['💬','sonstiges']};
+function zeigeNachrichten(){
+  var h='<button class="gross b-navy" onclick="nachrichtForm()">✉️ '+L('neueNachricht')+'</button><div style="height:12px"></div>';
+  h+='<div id="pushKarte"></div><div id="nliste"><div class="leer">…</div></div>';
+  $('inhalt').innerHTML=h;
+  pushKarte();
+  ladeNachrichten();
+}
+function ladeNachrichten(){
+  return rufe('meldungen',{}).then(function(d){ S.nachr=d.liste; S.ungelesen=d.ungelesen; if(S.ansicht==='nachrichten') listeNachrichten(); badgeAktualisieren(); })
+    .catch(function(f){ var el=$('nliste'); if(el) el.innerHTML='<div class="leer">'+esc(fehlerText(f))+'</div>'; });
+}
+function badgeAktualisieren(){ var b=document.querySelector('nav.unten'); if(!b) return; var alt=S.ansicht; b.outerHTML='<nav class="unten">'+navKnopf('heute','🕒')+navKnopf('kalender','📅')+navKnopf('nachrichten','💬')+(S.nutzer.rolle==='admin'?navKnopf('verwaltung','⚙️'):'')+'</nav>'; }
+function listeNachrichten(){
+  var el=$('nliste'); if(!el) return; var l=S.nachr||[];
+  if(!l.length){ el.innerHTML='<div class="leer">'+L('keineNachr')+'</div>'; return; }
+  el.innerHTML=l.map(function(m){ var a=ARTEN[m.art]||ARTEN.sonstiges, neu=m.fuerMich&&!m.gelesen;
+    var z=m.zeit? m.zeit.slice(8,10)+'.'+m.zeit.slice(5,7)+'. '+m.zeit.slice(11,16) : '';
+    return '<div class="msg'+(neu?' neu':'')+'"><div class="kopfz"><span>'+a[0]+' <b>'+Lt(a[1])+'</b>'+(m.baustelleName?' · '+esc(m.baustelleName):'')+'</span><span>'+z+'</span></div>'+
+      '<div class="t">'+esc(m.text)+'</div><div class="kopfz"><span>'+(m.fuerMich?(tr()?'Kimden: ':'Von: ')+esc(m.vonName):(tr()?'Kime: ':'An: ')+esc(m.anName))+'</span>'+
+      (neu?'<button class="pill p-gruen" onclick="nachrichtGelesen(\''+m.id+'\')">✓ '+Lt('erledigt')+'</button>':(m.gelesen&&!m.fuerMich?'<span>✓✓ '+(tr()?'okundu / ':'')+'gelesen</span>':''))+'</div></div>'; }).join('');
+}
+function nachrichtGelesen(id){ rufe('meldungGelesen',{id:id}).then(function(d){ S.nachr=d.liste; S.ungelesen=d.ungelesen; listeNachrichten(); badgeAktualisieren(); }).catch(function(f){ toast(fehlerText(f)); }); }
+var NF=null;
+function nachrichtForm(art){
+  NF=NF||{art:'material', baustelle:(S.laufend&&S.laufend.baustelle)||S.auswahlBs||'', an:'', text:''};
+  if(art) NF.art=art;
+  var admin=S.nutzer.rolle==='admin';
+  var h='<h2>✉️ '+L('neueNachricht')+'</h2><div class="seg">'+Object.keys(ARTEN).map(function(k){ return '<button class="'+(NF.art===k?'an':'')+'" onclick="nfLesen();nachrichtForm(\''+k+'\')">'+ARTEN[k][0]+' '+L(ARTEN[k][1])+'</button>'; }).join('')+'</div>';
+  if(admin) h+='<label class="f">An</label><select class="eing" id="nfAn">'+S.mitarbeiter.filter(function(m){return m.id!==S.nutzer.id&&m.aktiv;}).map(function(m){return '<option value="'+m.id+'" '+(NF.an===m.id?'selected':'')+'>'+esc(m.name)+'</option>';}).join('')+'</select>';
+  else h+='<p class="klein" style="margin:10px 0 0">'+L('anChef')+' ✓</p>';
+  h+='<label class="f">'+L('baustelle','inl')+'</label><select class="eing" id="nfBs"><option value="">–</option>'+S.baustellen.map(function(b){return '<option value="'+b.id+'" '+(NF.baustelle===b.id?'selected':'')+'>'+esc(b.name)+'</option>';}).join('')+'</select>';
+  h+='<label class="f">'+L('nachrichtText','inl')+'</label><textarea class="eing" id="nfText" style="min-height:120px" placeholder="'+(NF.art==='material'?(tr()?'örn. 50 m NYM 3x1,5 · 10 priz kutusu / ':'')+'z. B. 50 m NYM 3x1,5 · 10 Schalterdosen':'')+'">'+esc(NF.text)+'</textarea>';
+  h+='<div id="fFehler"></div><div style="height:14px"></div><button class="gross b-gruen" onclick="nachrichtSenden()">📨 '+L('senden')+'</button><div style="height:8px"></div><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>';
+  oeffneBlatt(h,true);
+}
+function nfLesen(){ if(!NF) return; var a=$('nfAn'),b=$('nfBs'),t=$('nfText'); if(a) NF.an=a.value; if(b) NF.baustelle=b.value; if(t) NF.text=t.value; }
+function nachrichtSenden(){
+  nfLesen(); if(!NF.text.trim()) return fFehler(Lt('nachrichtText')+' ?');
+  rufe('meldungSenden',{art:NF.art, baustelle:NF.baustelle, an:NF.an, text:NF.text}).then(function(d){ NF=null; S.nachr=d.liste; schliesseBlatt(); toast('📨 '+(tr()?'Gönderildi / ':'')+'Gesendet'); if(S.ansicht!=='nachrichten') gehe('nachrichten'); else listeNachrichten(); })
+    .catch(function(f){ fFehler(fehlerText(f)); });
+}
+function pushKarte(){
+  var el=$('pushKarte'); if(!el) return;
+  if(LS.getItem('ze_push_ok')){ el.innerHTML='<p class="klein" style="text-align:center;margin:0 0 10px">🔔 '+(tr()?'Bildirimler açık / ':'')+'Benachrichtigungen eingerichtet · <a class="link" href="#" onclick="LS.removeItem(\'ze_push_ok\');pushKarte();return false">'+(tr()?'tekrar / ':'')+'neu einrichten</a></p>'; return; }
+  el.innerHTML='<div class="karte" style="border:2px dashed var(--blau)"><p class="titel">🔔 '+(tr()?'Telefona bildirim<br><small style="font-weight:400">':'')+'Meldungen aufs Handy'+(tr()?'</small>':'')+'</p><div id="pushInhalt" class="leer">…</div></div>';
+  rufe('benachrichtigung',{}).then(function(d){
+    var android=/Android/i.test(navigator.userAgent), ios=/iPhone|iPad/i.test(navigator.userAgent);
+    var store = ios ? 'https://apps.apple.com/app/ntfy/id1625396347' : 'https://play.google.com/store/apps/details?id=io.heckel.ntfy';
+    var abo = (android||ios) ? 'ntfy://'+d.server+'/'+d.thema : 'https://'+d.server+'/'+d.thema;
+    $('pushInhalt').className=''; $('pushInhalt').innerHTML=
+      '<p class="klein" style="text-align:left">'+(tr()?'1) Ücretsiz <b>ntfy</b> uygulamasını yükleyin. 2) „Abone ol“a dokunun. 3) Onaylayın.<br>':'')+'1) Kostenlose App <b>ntfy</b> installieren (ohne Konto). 2) Auf „Abonnieren“ tippen. 3) In ntfy bestätigen.</p>'+
+      '<div class="reihe"><a class="mittel b-hell" style="text-decoration:none" href="'+store+'" target="_blank">⬇️ ntfy</a><a class="mittel b-blau" style="color:#fff;text-decoration:none" href="'+abo+'" onclick="LS.setItem(\'ze_push_ok\',\'1\')">🔔 '+(tr()?'Abone ol / ':'')+'Abonnieren</a></div>'+
+      '<p class="klein" style="text-align:left;margin-top:8px">'+(tr()?'Elle: sunucu ntfy.sh, konu:<br>':'Von Hand: Server ntfy.sh, Thema:<br>')+'<code style="user-select:all">'+esc(d.thema)+'</code></p>';
+  }).catch(function(f){ var p=$('pushInhalt'); if(p) p.textContent=fehlerText(f); });
+}
+// Neue Nachrichten regelmäßig prüfen, solange die App offen ist
+setInterval(function(){ if(S.token&&S.nutzer&&!document.hidden) rufe('meldungen',{}).then(function(d){ var vorher=S.ungelesen||0; S.nachr=d.liste; S.ungelesen=d.ungelesen; if(S.ansicht==='nachrichten') listeNachrichten(); if(d.ungelesen!==vorher) badgeAktualisieren(); }).catch(function(){}); }, 60000);
+if(location.hash==='#nachrichten'){ S.ansicht='nachrichten'; try{ history.replaceState(null,'',location.pathname); }catch(e){} }
 
 init();
 </script>

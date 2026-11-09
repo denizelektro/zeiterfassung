@@ -7,6 +7,7 @@
  */
 
 var APP = {
+  appUrl: 'https://denizelektro.github.io/zeiterfassung/',
   ordner: 'Zeiterfassung',          // Ordner in "Meine Ablage" für Monatsberichte
   logoName: 'LOGO_NEU_07.07.26-removebg-preview.png',
   firma: 'Baudienstleistungen D. Söner',
@@ -15,7 +16,8 @@ var APP = {
 };
 
 var T = {
-  MA:  { name: 'Mitarbeiter', kopf: ['id', 'name', 'pinHash', 'rolle', 'sprache', 'aktiv', 'urlaubJahr', 'urlaubStartJahr', 'urlaubStartGenommen'] },
+  MA:  { name: 'Mitarbeiter', kopf: ['id', 'name', 'pinHash', 'rolle', 'sprache', 'aktiv', 'urlaubJahr', 'urlaubStartJahr', 'urlaubStartGenommen', 'ntfy'] },
+  ME:  { name: 'Nachrichten', kopf: ['id', 'von', 'an', 'zeit', 'baustelle', 'art', 'text', 'gelesen'] },
   BS:  { name: 'Baustellen',  kopf: ['id', 'name', 'adresse', 'aktiv', 'erstellt'] },
   E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert'] },
   TAG: { name: 'Abschluesse', kopf: ['ma', 'datum', 'zeit'] },
@@ -77,6 +79,10 @@ var AKTIONEN = {
   abwesenheit:    { fn: function (ich, d) { return abwesenheit_(ich, d); } },
   tagAbschliessen:{ fn: function (ich, d) { return tagAbschluss_(ich, d, true); } },
   tagOeffnen:     { fn: function (ich, d) { return tagAbschluss_(ich, d, false); } },
+  meldungen:      { fn: function (ich, d) { return meldungen_(ich); } },
+  meldungSenden:  { fn: function (ich, d) { return meldungSenden_(ich, d); } },
+  meldungGelesen: { fn: function (ich, d) { return meldungGelesen_(ich, d); } },
+  benachrichtigung: { fn: function (ich, d) { return { thema: ntfyThema_(ich.id), server: 'ntfy.sh' }; } },
   abmelden:       { fn: function (ich, d, token) { PropertiesService.getScriptProperties().deleteProperty('T_' + token); return true; } },
   // nur Admin
   uebersicht:     { admin: true, fn: function (ich, d) { return uebersicht_(d); } },
@@ -133,7 +139,8 @@ function startDaten_(ich) {
   var r = {
     nutzer: ich,
     baustellen: zeilen_(T.BS).filter(function (b) { return b.aktiv !== 'nein'; }).map(function (b) { return { id: b.id, name: b.name, adresse: b.adresse }; }),
-    heute: heute_()
+    heute: heute_(),
+    ungelesen: ungelesen_(ich)
   };
   if (ich.rolle === 'admin') {
     r.mitarbeiter = zeilen_(T.MA).map(function (m) { var o = oeffentlich_(m); o.aktiv = m.aktiv !== 'nein';
@@ -559,7 +566,72 @@ function pruefeDatum_(d) { if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d))) throw new
 /* ============================ Tabellen-Hilfen ============================ */
 
 function db_() { return SpreadsheetApp.getActiveSpreadsheet(); }
-function blatt_(t) { return db_().getSheetByName(t.name); }
+function blatt_(t) {
+  var sh = db_().getSheetByName(t.name);
+  if (!sh) {   // neue Tabellenblätter bei Erweiterungen automatisch anlegen
+    sh = db_().insertSheet(t.name);
+    sh.getRange(1, 1, sh.getMaxRows(), t.kopf.length).setNumberFormat('@');
+    sh.getRange(1, 1, 1, t.kopf.length).setValues([t.kopf]);
+  }
+  return sh;
+}
+
+/* ============================ Nachrichten + Push (ntfy) ============================ */
+
+function fuerMich_(ich, m) { return m.an === ich.id || (m.an === 'admin' && ich.rolle === 'admin'); }
+
+function ungelesen_(ich) {
+  return zeilen_(T.ME).filter(function (m) { return fuerMich_(ich, m) && !m.gelesen; }).length;
+}
+
+function meldungen_(ich) {
+  var namen = {}; zeilen_(T.MA).forEach(function (m) { namen[m.id] = m.name; });
+  var bs = {}; zeilen_(T.BS).forEach(function (b) { bs[b.id] = b.name; });
+  var liste = zeilen_(T.ME).filter(function (m) { return fuerMich_(ich, m) || m.von === ich.id; })
+    .sort(function (a, b) { return a.zeit < b.zeit ? 1 : -1; }).slice(0, 80)
+    .map(function (m) { return { id: m.id, von: m.von, vonName: namen[m.von] || '', an: m.an, anName: m.an === 'admin' ? 'Chef' : (namen[m.an] || ''), zeit: m.zeit,
+      baustelle: m.baustelle, baustelleName: bs[m.baustelle] || '', art: m.art, text: m.text, gelesen: m.gelesen, fuerMich: fuerMich_(ich, m) }; });
+  return { liste: liste, ungelesen: ungelesen_(ich) };
+}
+
+function meldungSenden_(ich, d) {
+  var text = String(d.text || '').trim().slice(0, 1000);
+  if (!text) throw new Error('Text fehlt');
+  var art = ['material', 'vorfall', 'sonstiges'].indexOf(d.art) >= 0 ? d.art : 'sonstiges';
+  var an = 'admin';
+  if (ich.rolle === 'admin' && d.an && d.an !== 'admin') { if (!finde_(T.MA, d.an)) throw new Error('Empfänger unbekannt'); an = String(d.an); }
+  var m = { id: Utilities.getUuid(), von: ich.id, an: an, zeit: jetzt_(), baustelle: String(d.baustelle || ''), art: art, text: text, gelesen: '' };
+  schreiben_(T.ME, m);
+  var bsName = d.baustelle && finde_(T.BS, d.baustelle) ? finde_(T.BS, d.baustelle).name : '';
+  var ziel = an === 'admin' ? zeilen_(T.MA).filter(function (x) { return x.rolle === 'admin' && x.aktiv !== 'nein'; }) : [finde_(T.MA, an)];
+  var titel = { material: '📦 Material', vorfall: '⚠️ Vorfall', sonstiges: '💬 Nachricht' }[art] + (bsName ? ' – ' + bsName : '');
+  ziel.forEach(function (x) { if (x && x.id !== ich.id) pushSenden_(x.id, titel, ich.name + ': ' + text, art === 'vorfall' ? 5 : 4); });
+  return meldungen_(ich);
+}
+
+function meldungGelesen_(ich, d) {
+  var m = finde_(T.ME, d.id);
+  if (m && fuerMich_(ich, m)) aktualisieren_(T.ME, m.id, { gelesen: jetzt_() });
+  return meldungen_(ich);
+}
+
+/** Persönliches, geheimes ntfy-Thema eines Nutzers (wird beim ersten Mal erzeugt). */
+function ntfyThema_(maId) {
+  var m = finde_(T.MA, maId);
+  if (m && m.ntfy) return m.ntfy;
+  var thema = 'soener-zeit-' + Utilities.getUuid().replace(/-/g, '').slice(0, 16);
+  aktualisieren_(T.MA, maId, { ntfy: thema });
+  return thema;
+}
+
+function pushSenden_(maId, titel, text, prio) {
+  try {
+    var m = finde_(T.MA, maId);
+    if (!m || !m.ntfy) return;   // nur wer die Benachrichtigung eingerichtet hat
+    UrlFetchApp.fetch('https://ntfy.sh/', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      payload: JSON.stringify({ topic: m.ntfy, title: titel, message: text.slice(0, 900), priority: prio || 4, click: APP.appUrl + '#nachrichten' }) });
+  } catch (e) { /* Push ist ein Extra – Nachricht ist trotzdem gespeichert */ }
+}
 
 function zeilen_(t) {
   var w = blatt_(t).getDataRange().getValues();
