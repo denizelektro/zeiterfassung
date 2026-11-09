@@ -296,18 +296,19 @@ function toast(t){ var el=$('toast'); el.textContent=t; el.classList.add('an'); 
 function init(){
   S.token = LS.getItem('ze_token');
   if(!S.token){ zeigeLogin(); return; }
-  rufe('start',{}).then(function(d){ startSetzen(d); var m=monatVon(heuteIso()); return ladeMonat(S.nutzer.id,m); })
-    .then(function(){ render(); schlangeSenden(); })
+  // Sofort mit den zuletzt bekannten Daten starten, dann im Hintergrund aktualisieren
+  var cache=null; try{ cache=JSON.parse(LS.getItem('ze_start')||'null'); }catch(e){}
+  if(cache){ try{ startSetzen(cache); var mc=JSON.parse(LS.getItem('ze_monate')||'{}'); for(var k in mc) S.monate[k]=mc[k];
+    S.laufend=JSON.parse(LS.getItem('ze_laufend')||'null'); render(); }catch(e){ cache=null; } }
+  var mo=monatVon(heuteIso());
+  rufe('start',{monat:mo}).then(function(d){ startSetzen(d); if(d.monatDaten) monatSetzen(d.monatDaten); else return ladeMonat(S.nutzer.id,mo); })
+    .then(function(){ if(!$('blatt').classList.contains('an')) render(); else zeigeOffline(); schlangeSenden(); })
     .catch(function(f){ if(f.anmeldung) return;
-      if(f.netz && LS.getItem('ze_start')){ try{
-        startSetzen(JSON.parse(LS.getItem('ze_start')));
-        var mc=JSON.parse(LS.getItem('ze_monate')||'{}'); for(var k in mc) S.monate[k]=mc[k];
-        S.laufend=JSON.parse(LS.getItem('ze_laufend')||'null');
-        render(); toast((tr()?'İnternet yok – kayıtlar sonra gönderilir · ':'')+'Offline – Buchungen werden später gesendet'); return; }catch(e){} }
+      if(cache){ toast(f.netz ? (tr()?'İnternet yok – kayıtlar sonra gönderilir · ':'')+'Offline – Buchungen werden später gesendet' : fehlerText(f)); return; }
       $('app').innerHTML='<div class="lade" style="flex-direction:column;gap:14px;padding:20px;text-align:center">'+esc(fehlerText(f))+'<button class="mittel b-navy" style="color:#fff;max-width:240px" onclick="location.reload()">Neu laden</button></div>'; });
 }
 function startSetzen(d){
-  try{ LS.setItem('ze_start', JSON.stringify(d)); }catch(e){}
+  try{ LS.setItem('ze_start', JSON.stringify(d)); LS.setItem('ze_sprache', d.nutzer.sprache||'de'); }catch(e){}
   S.nutzer=d.nutzer; S.baustellen=d.baustellen; S.mitarbeiter=d.mitarbeiter||[]; S.alleBaustellen=d.alleBaustellen||[];
   S.ma = S.ma || S.nutzer.id; S.kalMonat = S.kalMonat || monatVon(heuteIso()); S.adminMonat = S.adminMonat || monatVon(heuteIso());
   document.documentElement.lang = tr() ? 'tr' : 'de';
@@ -318,10 +319,11 @@ function abmeldenLokal(){ ['ze_token','ze_start','ze_monate','ze_laufend'].forEa
 var pinEingabe='';
 function zeigeLogin(){
   pinEingabe=''; schliesseBlatt();
-  $('app').innerHTML = '<div class="login"><div style="font-size:min(42px,5vh)">⚡</div><h1>Zeiterfassung</h1><div style="opacity:.85;text-align:center"><b>PIN girin</b><br><small>PIN eingeben</small></div>'+
+  var nurDe = LS.getItem('ze_sprache')==='de';   // Sprache merkt sich das Gerät nach der ersten Anmeldung
+  $('app').innerHTML = '<div class="login"><div style="font-size:min(42px,5vh)">⚡</div><h1>Zeiterfassung</h1><div style="opacity:.85;text-align:center">'+(nurDe?'<b>PIN eingeben</b>':'<b>PIN girin</b><br><small>PIN eingeben</small>')+'</div>'+
     '<div class="punkte" id="punkte"></div><div class="tasten">'+[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(function(z){
       return z===''?'<span></span>':'<button onclick="pinTaste(\''+z+'\')">'+z+'</button>'; }).join('')+'</div>'+
-    '<button id="pinOk" class="mittel" style="margin-top:min(22px,2.5vh);max-width:260px;background:#fff;color:var(--navy)" onclick="pinSenden()"><b>Giriş</b>&nbsp;/ Anmelden</button>'+
+    '<button id="pinOk" class="mittel" style="margin-top:min(22px,2.5vh);max-width:260px;background:#fff;color:var(--navy)" onclick="pinSenden()">'+(nurDe?'<b>Anmelden</b>':'<b>Giriş</b>&nbsp;/ Anmelden')+'</button>'+
     '<div id="pinFehler" style="margin-top:14px;min-height:22px;color:#ffd2cc;text-align:center"></div></div>';
   pinPunkte();
 }
@@ -329,12 +331,14 @@ function pinTaste(z){ if(z==='⌫') pinEingabe=pinEingabe.slice(0,-1); else if(p
 function pinPunkte(){ var n=Math.max(4,pinEingabe.length); var h=''; for(var i=0;i<n;i++) h+='<span class="'+(i<pinEingabe.length?'voll':'')+'"></span>'; $('punkte').innerHTML=h; }
 function pinSenden(){
   if(pinEingabe.length<4) return;
-  $('pinOk').disabled=true;
+  var knopf=$('pinOk'), vorher=knopf.innerHTML; knopf.disabled=true; knopf.innerHTML='⏳ …';
+  var nurDe = LS.getItem('ze_sprache')==='de';
   google.script.run.withSuccessHandler(function(r){
-    $('pinOk').disabled=false;
-    if(!r.ok){ pinEingabe=''; pinPunkte(); var t=FEHLER[r.fehler]||[r.fehler,r.fehler]; $('pinFehler').innerHTML='<b>'+t[0]+'</b><br>'+t[1]; return; }
-    S.token=r.daten.token; LS.setItem('ze_token',S.token); S.ansicht='heute'; init();
-  }).withFailureHandler(function(){ $('pinOk').disabled=false; $('pinFehler').innerHTML='<b>İnternet yok</b><br>Keine Verbindung'; }).api(null,'login',{pin:pinEingabe});
+    knopf.disabled=false; knopf.innerHTML=vorher;
+    if(!r.ok){ pinEingabe=''; pinPunkte(); var t=FEHLER[r.fehler]||[r.fehler,r.fehler]; $('pinFehler').innerHTML=nurDe?'<b>'+t[1]+'</b>':'<b>'+t[0]+'</b><br>'+t[1]; return; }
+    var d=r.daten; S.token=d.token; LS.setItem('ze_token',S.token); S.ansicht='heute';
+    if(d.start){ startSetzen(d.start); if(d.monat) monatSetzen(d.monat); render(); schlangeSenden(); } else init();
+  }).withFailureHandler(function(){ knopf.disabled=false; knopf.innerHTML=vorher; $('pinFehler').innerHTML=nurDe?'<b>Keine Verbindung</b>':'<b>İnternet yok</b><br>Keine Verbindung'; }).api(null,'login',{pin:pinEingabe});
 }
 
 /* ======================= Rahmen ======================= */
