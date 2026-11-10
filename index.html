@@ -193,7 +193,7 @@ window.google = { script: { run: (function mk(ok, nein) {
     };
   } });
 })(null, null) } };
-if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(function () {}); });
 </script>
 <script>
 /* ======================= Texte (Türkisch / Deutsch) ======================= */
@@ -839,7 +839,7 @@ function zeigeVerwaltung(){
   if(S.adminTab==='team'){
     h+='<div class="karte">'+S.mitarbeiter.map(function(m){ return '<div class="zeileL"><div><b style="'+(m.aktiv?'':'opacity:.45')+'">'+esc(m.name)+'</b><div class="klein">'+(m.rolle==='admin'?'Admin':'Mitarbeiter')+' · '+(m.sprache==='tr'?'Türkisch + Deutsch':'Deutsch')+'</div></div><button class="pill p-grau" onclick="maForm(\''+m.id+'\')">✎ Bearbeiten</button></div>'; }).join('')+'</div>'+
        '<button class="mittel b-hell" onclick="maForm(null)">＋ Mitarbeiter hinzufügen</button>';
-    h+='<div class="karte" style="margin-top:14px"><p class="titel">🤖 KI für Sprache, Foto & Belege '+(S.kiAktiv?'<span class="pill p-gruen">aktiv</span>':'<span class="pill p-grau">aus</span>')+'</p>'+
+    if(istPC()) h+='<div class="karte" style="margin-top:14px"><p class="titel">🤖 KI für Sprache, Foto & Belege '+(S.kiAktiv?'<span class="pill p-gruen">aktiv</span>':'<span class="pill p-grau">aus</span>')+'</p>'+
       '<p class="klein">Kostenloser Schlüssel von Google: <a class="link" href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> öffnen → „API-Schlüssel erstellen“ → kopieren und hier einfügen.</p>'+
       '<input class="eing" id="kiKey" placeholder="'+(S.kiAktiv?'neuer Schlüssel (optional)':'API-Schlüssel einfügen')+'" autocomplete="off"><div style="height:8px"></div>'+
       '<button class="mittel b-navy" style="color:#fff" onclick="kiKeySpeichern()">Speichern & testen</button></div>';
@@ -855,6 +855,7 @@ function bericht(id){
 function entsperren(id){ frage('Monat wieder freigeben? Der Mitarbeiter kann dann wieder ändern.', 'Entsperren', function(){ entsperrenJetzt(id); }); }
 function entsperrenJetzt(id){
   rufe('monatEntsperren',{ma:id, monat:S.adminMonat}).then(function(u){ S.uebersicht={monat:S.adminMonat,liste:u}; delete S.monate[schl(id,S.adminMonat)]; zeigeVerwaltung(); }).catch(function(f){ toast(fehlerText(f)); }); }
+function istPC(){ try{ return matchMedia('(pointer:fine)').matches && !matchMedia('(pointer:coarse)').matches && window.innerWidth>=700; }catch(e){ return false; } }
 function kiKeySpeichern(){
   var k=$('kiKey').value.trim(); if(!k) return;
   rufe('kiSchluessel',{schluessel:k}).then(function(r){ S.kiAktiv=r.kiAktiv; try{ var st=JSON.parse(LS.getItem('ze_start')); st.kiAktiv=r.kiAktiv; LS.setItem('ze_start',JSON.stringify(st)); }catch(e){} toast('✓ KI aktiv'); zeigeVerwaltung(); })
