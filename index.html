@@ -330,7 +330,9 @@ function init(){
   // Sofort mit den zuletzt bekannten Daten starten, dann im Hintergrund aktualisieren
   var cache=null; try{ cache=JSON.parse(LS.getItem('ze_start')||'null'); }catch(e){}
   if(cache){ try{ startSetzen(cache); var mc=JSON.parse(LS.getItem('ze_monate')||'{}'); for(var k in mc) S.monate[k]=mc[k];
-    S.laufend=JSON.parse(LS.getItem('ze_laufend')||'null'); render(); }catch(e){ cache=null; } }
+    S.laufend=JSON.parse(LS.getItem('ze_laufend')||'null');
+    if(S.laufend && !/^\d{4}-\d{2}-\d{2}$/.test(S.laufend.datum)) throw new Error('alt');   // alte, kaputte Daten verwerfen
+    render(); }catch(e){ cache=null; S.monate={}; S.laufend=null; ['ze_monate','ze_laufend','ze_schlange'].forEach(function(k){ LS.removeItem(k); }); } }
   var mo=monatVon(heuteIso());
   rufe('start',{monat:mo}).then(function(d){ startSetzen(d); if(d.monatDaten) monatSetzen(d.monatDaten); else return ladeMonat(S.nutzer.id,mo); })
     .then(function(){ if(!$('blatt').classList.contains('an')) render(); else zeigeOffline(); schlangeSenden(); })
@@ -449,7 +451,8 @@ function navi(id){
 }
 function waehleBs(id){ S.auswahlBs=id; LS.setItem('ze_letzteBs',id); zeigeHeute(); }
 function stempel(art, bs){
-  var d={art:art, zeit:jetztZeit(), datum:(S.laufend&&art!=='beginn'&&art!=='wechsel')?S.laufend.datum:heuteIso()};
+  var ld=S.laufend&&/^\d{4}-\d{2}-\d{2}$/.test(S.laufend.datum)?S.laufend.datum:heuteIso();
+  var d={art:art, zeit:jetztZeit(), datum:(S.laufend&&art!=='beginn'&&art!=='wechsel')?ld:heuteIso()};
   if(art==='beginn'||art==='wechsel'){ d.baustelle = bs||S.auswahlBs; if(!d.baustelle){ toast(Lt('BAUSTELLE_FEHLT')); return; } d.id=uuid(); d.datum=heuteIso(); }
   var endeId = art==='ende' && S.laufend ? S.laufend.id : null;
   buchen('stempeln', d).then(function(){

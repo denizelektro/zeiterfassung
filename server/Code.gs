@@ -198,8 +198,11 @@ function laufend_(ma) {
  * d.datum: 'YYYY-MM-DD', d.id: Kennung für neuen Eintrag (vom Handy erzeugt)
  */
 function stempeln_(ich, d) {
-  pruefeZeit_(d.zeit); pruefeDatum_(d.datum);
+  pruefeZeit_(d.zeit);
   var l = laufend_(ich.id);
+  // Beim Beenden/Pausieren zählt das Datum des laufenden Eintrags, nicht das vom Handy
+  if (d.art !== 'beginn' && d.art !== 'wechsel') d.datum = l ? l.datum : heute_();
+  pruefeDatum_(d.datum);
   if (d.art === 'beginn' || d.art === 'wechsel') {
     if (!d.id) throw new Error('Kennung fehlt');
     if (finde_(T.E, d.id)) return monat_(ich, { monat: d.datum.slice(0, 7) }); // schon angekommen (Wiederholung)
