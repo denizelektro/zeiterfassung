@@ -20,7 +20,7 @@ var APP = {
 var T = {
   MA:  { name: 'Mitarbeiter', kopf: ['id', 'name', 'pinHash', 'rolle', 'sprache', 'aktiv', 'urlaubJahr', 'urlaubStartJahr', 'urlaubStartGenommen', 'ntfy'] },
   ME:  { name: 'Nachrichten', kopf: ['id', 'von', 'an', 'zeit', 'baustelle', 'art', 'text', 'gelesen'] },
-  BS:  { name: 'Baustellen',  kopf: ['id', 'name', 'adresse', 'aktiv', 'erstellt'] },
+  BS:  { name: 'Baustellen',  kopf: ['id', 'name', 'adresse', 'aktiv', 'erstellt', 'fuer'] },
   E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert', 'belege'] },
   TAG: { name: 'Abschluesse', kopf: ['ma', 'datum', 'zeit'] },
   SP:  { name: 'Monatssperren', kopf: ['ma', 'monat', 'zeit', 'tabelleId', 'pdfId'] }
@@ -102,6 +102,7 @@ var AKTIONEN = {
   belegHochladen: { ohneLock: true, fn: function (ich, d) { return belegHochladen_(ich, d); } },
   abrechnung:     { admin: true, fn: function (ich, d) { return abrechnung_(d); } },
   abrechnungTabelle: { admin: true, fn: function (ich, d) { return abrechnungTabelle_(d); } },
+  baustelleNeu:   { fn: function (ich, d) { return baustelleNeu_(ich, d); } },
   kiSchluessel:   { admin: true, fn: function (ich, d) { return kiSchluessel_(d); } },
   kiDiagnose:     { admin: true, ohneLock: true, fn: function (ich, d) { return kiDiagnose_(d); } }
 };
@@ -327,7 +328,8 @@ function hash_(pin) {
 function startDaten_(ich) {
   var r = {
     nutzer: ich,
-    baustellen: zeilen_(T.BS).filter(function (b) { return b.aktiv !== 'nein'; }).map(function (b) { return { id: b.id, name: b.name, adresse: b.adresse }; }),
+    // gemeinsame Baustellen + die, die sich der Mitarbeiter selbst angelegt hat
+    baustellen: zeilen_(T.BS).filter(function (b) { return b.aktiv !== 'nein' && (!b.fuer || b.fuer === ich.id); }).map(function (b) { return { id: b.id, name: b.name, adresse: b.adresse }; }),
     heute: heute_(),
     ungelesen: ungelesen_(ich),
     kiAktiv: kiAktiv_()
@@ -335,7 +337,8 @@ function startDaten_(ich) {
   if (ich.rolle === 'admin') {
     r.mitarbeiter = zeilen_(T.MA).map(function (m) { var o = oeffentlich_(m); o.aktiv = m.aktiv !== 'nein';
       o.urlaubJahr = Number(m.urlaubJahr || 0); o.urlaubStartGenommen = Number(m.urlaubStartGenommen || 0); o.urlaubStartJahr = m.urlaubStartJahr || ''; return o; });
-    r.alleBaustellen = zeilen_(T.BS).map(function (b) { return { id: b.id, name: b.name, adresse: b.adresse, aktiv: b.aktiv !== 'nein' }; });
+    var maNamen = {}; zeilen_(T.MA).forEach(function (m) { maNamen[m.id] = m.name; });
+    r.alleBaustellen = zeilen_(T.BS).map(function (b) { return { id: b.id, name: b.name, adresse: b.adresse, aktiv: b.aktiv !== 'nein', fuer: b.fuer || '', fuerName: b.fuer ? (maNamen[b.fuer] || b.fuer) : '' }; });
   }
   return r;
 }
@@ -535,13 +538,30 @@ function baustelleSpeichern_(d) {
   var name = String(b.name || '').trim();
   if (!name) throw new Error('Name fehlt');
   var adresse = String(b.adresse || '').trim();
-  if (b.id && finde_(T.BS, b.id)) aktualisieren_(T.BS, b.id, { name: name, adresse: adresse, aktiv: b.aktiv === false ? 'nein' : 'ja' });
+  kopfPruefen_(T.BS);
+  if (b.id && finde_(T.BS, b.id)) { var aend = { name: name, adresse: adresse, aktiv: b.aktiv === false ? 'nein' : 'ja' }; if (b.fuer !== undefined) aend.fuer = String(b.fuer || ''); aktualisieren_(T.BS, b.id, aend); }
   else {
     var gleich = function (x, y) { return String(x || '').trim().toLowerCase() === String(y || '').trim().toLowerCase(); };
     var doppelt = zeilen_(T.BS).some(function (x) { return gleich(x.name, name) && gleich(x.adresse, adresse); });
     if (!doppelt) schreiben_(T.BS, { id: Utilities.getUuid().slice(0, 8), name: name, adresse: adresse, aktiv: 'ja', erstellt: jetzt_() });
   }
   return startDaten_({ rolle: 'admin' });
+}
+
+/** Neue Baustelle direkt vom Startbildschirm: vom Chef für alle, vom Mitarbeiter nur für ihn selbst. */
+function baustelleNeu_(ich, d) {
+  kopfPruefen_(T.BS);
+  var name = String(d.name || '').trim().slice(0, 80), adresse = String(d.adresse || '').trim().slice(0, 150);
+  if (!name) throw new Error('Name fehlt');
+  var fuer = ich.rolle === 'admin' ? '' : ich.id;
+  var gleich = function (x, y) { return String(x || '').trim().toLowerCase() === String(y || '').trim().toLowerCase(); };
+  var da = zeilen_(T.BS).filter(function (x) { return x.aktiv !== 'nein' && (!x.fuer || x.fuer === ich.id) && gleich(x.name, name) && gleich(x.adresse, adresse); })[0];
+  var id = da ? da.id : Utilities.getUuid().slice(0, 8);
+  if (!da) {
+    schreiben_(T.BS, { id: id, name: name, adresse: adresse, aktiv: 'ja', erstellt: jetzt_(), fuer: fuer });
+    if (fuer) { var m = finde_(T.MA, ich.id); pushAnAdmin_('🏗 Neue Baustelle von ' + ((m && m.name) || ich.id), name + (adresse ? ' · ' + adresse : '')); }
+  }
+  return { id: id, start: startDaten_(ich) };
 }
 
 /** Baustelle löschen – nur wenn noch keine Stunden darauf gebucht sind. */
