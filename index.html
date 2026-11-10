@@ -513,7 +513,8 @@ function tagStatus(datum, zu){
 function zeigeKalender(){
   var mo=S.kalMonat, ma=S.ma||S.nutzer.id, d=monatDaten(ma,mo), h='';
   if(S.nutzer.rolle==='admin' && S.mitarbeiter.length>1){
-    h+='<select class="eing sel-ma" onchange="S.ma=this.value;zeigeKalender()">'+S.mitarbeiter.map(function(x){return '<option value="'+x.id+'" '+(x.id===ma?'selected':'')+'>'+esc(x.name)+'</option>';}).join('')+'</select>';
+    h+='<div class="filter" style="margin-bottom:8px">'+S.mitarbeiter.filter(function(x){return x.aktiv!==false;}).map(function(x){ var an=x.id===ma;
+      return '<button class="'+(an?'an f-alle':'')+'" style="'+(an?'background:var(--navy);color:#fff;border-color:var(--navy)':'')+'" onclick="S.ma=\''+x.id+'\';zeigeKalender()">👤 '+esc(x.name)+'</button>'; }).join('')+'</div>';
   }
   var fl=S.kalFilter||'';
   h+='<div class="filter">'+[['','f-alle',tr()?'Hepsi<br><small>Alle</small>':'Alle'],['U','f-U','🏖 '+(tr()?'İzin':'Urlaub')],['K','f-K','🤒 '+(tr()?'Hasta':'Krank')]].map(function(f){
