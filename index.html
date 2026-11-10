@@ -448,7 +448,11 @@ function zeigeHeute(reise){
   h+='<div class="karte" style="padding-bottom:6px"><div style="font-size:1.1rem">'+datumText(heute)+'</div></div>';
   var heuteA = m.eintraege.filter(function(e){ return e.datum===heute && e.typ==='A'; });
   var R = reiseStand(heuteA);
-  if(reise){ h+=punktKarte(['abfahrt','ankunftBs']); if(!S.reiseP||S.reiseP.datum!==heute) reisePLaden(); }
+  if(reise){ if(!S.reiseP||S.reiseP.datum!==heute) reisePLaden();
+    h+=punktKarte(['abfahrt','ankunftBs','abfahrtBs','ankunft']);
+    if(R.ankunft||R.km!=='') h+='<div class="karte reiseK"><div class="reiseZeit" style="font-size:1.2rem">🧾 '+(R.abfahrt||'?')+' – '+(R.ankunft||'?')+(R.km!==''?' · '+R.km+' km':'')+(R.uebern?' · 🛏':'')+' <button class="link" onclick="reiseForm()">✏️</button></div></div>';
+    h+='<p class="klein" style="margin:0 4px 12px">📍 '+(tr()?'Konum sadece bu düğmelere basınca bir kez kaydedilir.<br>':'')+'Der Standort wird nur beim Drücken dieser Knöpfe einmal gespeichert. Nur nutzen, wenn du allein mit deinem eigenen Auto fährst.</p>';
+    $('inhalt').innerHTML=h; clearInterval(S.uhrTimer); return; }
   if(m.gesperrt) h+='<div class="hinweis">'+Lt('gesperrt')+'</div>';
   h+='<div class="karte" id="stempel">';
   if(!l){
@@ -472,11 +476,6 @@ function zeigeHeute(reise){
     h+='<button class="gross b-rot" onclick="stempel(\'ende\')">■ '+L('feierabend')+'</button>';
   }
   h+='</div>';
-  if(reise){
-    h+=punktKarte(['abfahrtBs','ankunft']);
-    if(R.ankunft||R.km!=='') h+='<div class="karte reiseK"><div class="reiseZeit" style="font-size:1.2rem">🧾 '+(R.abfahrt||'?')+' – '+(R.ankunft||'?')+(R.km!==''?' · '+R.km+' km':'')+(R.uebern?' · 🛏':'')+' <button class="link" onclick="reiseForm()">✏️</button></div></div>';
-    h+='<p class="klein" style="margin:0 4px 12px">📍 '+(tr()?'Konum sadece bu düğmelere basınca bir kez kaydedilir.<br>':'')+'Der Standort wird nur beim Drücken dieser Knöpfe einmal gespeichert. Nur nutzen, wenn du allein mit deinem eigenen Auto fährst.</p>';
-  }
   var heuteE = m.eintraege.filter(function(e){ return e.datum===heute; });
   h+='<div class="karte"><p class="titel">'+L('heuteGearbeitet')+'</p>'+eintragsListe(heuteE, heute, m)+'</div>';
   $('inhalt').innerHTML=h;
@@ -496,11 +495,12 @@ function reiseStand(heuteA){
 var RP_TXT={abfahrt:['🚗','Evden çıkış','Abfahrt von zu Hause'], ankunftBs:['📍','Şantiyeye vardım','An der Baustelle angekommen'], abfahrtBs:['🚗','Şantiyeden çıkış','Von der Baustelle losgefahren'], ankunft:['🏠','Eve vardım','Zu Hause angekommen']};
 function rpL(a){ var t=RP_TXT[a]; return tr()?'<b>'+t[1]+'</b><br><small>'+t[2]+'</small>':t[2]; }
 function punktKarte(arten){
-  var P=(S.reiseP&&S.reiseP.datum===heuteIso())?S.reiseP.punkte:[], h='<div class="karte reiseK">';
+  var P=(S.reiseP&&S.reiseP.datum===heuteIso())?S.reiseP.punkte:[], h='<div class="karte reiseK">', naechster=null;
+  arten.forEach(function(a){ if(!naechster && !P.some(function(x){return x.art===a;})) naechster=a; });
   arten.forEach(function(a){ var p=P.filter(function(x){return x.art===a;})[0];
     var K=S.reiseKm||{}, kmTxt = a==='ankunftBs'&&K.hin!=null ? '<div class="klein">'+(tr()?'Gidiş ':'Hinweg ')+'≈ '+K.hin+' km</div>' : a==='ankunft'&&K.rueck!=null ? '<div class="klein">'+(tr()?'Dönüş ':'Rückweg ')+'≈ '+K.rueck+' km</div>' : '';
     h+= p ? '<div class="rpZ"><span>'+RP_TXT[a][0]+' '+rpL(a)+kmTxt+'</span><b>'+p.zeit+(p.lat!=null?' ✓':' ⚠')+'</b></div>'
-          : '<button class="gross '+(a==='ankunft'?'b-blau':'b-navy')+'" style="margin:6px 0" onclick="reisePunktSetzen(\''+a+'\')">'+RP_TXT[a][0]+' '+rpL(a)+'</button>'; });
+          : '<button class="'+(a===naechster?'gross '+(a==='ankunft'?'b-blau':'b-navy'):'mittel b-hell')+'" style="margin:6px 0" onclick="reisePunktSetzen(\''+a+'\')">'+RP_TXT[a][0]+' '+rpL(a)+'</button>'; });
   return h+'</div>';
 }
 function reisePLaden(){ rufeRoh('reisePunkte',{datum:heuteIso()}).then(function(r){ S.reiseP=r; if(S.ansicht==='reise') render(); if(r.punkte.length>1) reiseKmLaden(); }).catch(function(){}); }
