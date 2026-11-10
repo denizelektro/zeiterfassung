@@ -54,6 +54,11 @@
   .uhr{font-size:3rem;font-weight:800;letter-spacing:1px;font-variant-numeric:tabular-nums;color:var(--navy)}
   .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:99px;font-size:.8rem;font-weight:600}
   .p-gruen{background:var(--gruenhell);color:var(--gruen)} .p-gelb{background:var(--gelbhell);color:#a86400} .p-blau{background:var(--blauhell);color:var(--blau)} .p-rot{background:var(--rothell);color:var(--rot)} .p-grau{background:#eef1f4;color:var(--grau)}
+  .sw{position:relative;overflow:hidden;border-radius:14px;margin-bottom:10px;touch-action:pan-y}
+  .sw .weg{position:absolute;right:0;top:0;bottom:0;width:96px;background:var(--rot);color:#fff;font-weight:800;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:.85rem}
+  .sw .vorne{position:relative;transition:transform .18s ease;will-change:transform}
+  .sw .vorne.zieht{transition:none}
+  .sw .eintrag{margin-bottom:0}
   .eintrag{border:1px solid var(--linie);border-radius:14px;padding:12px 14px;margin-bottom:10px;background:#fff;width:100%;text-align:left;display:block}
   .eintrag .k{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
   .eintrag .bsn{font-weight:700}
@@ -426,7 +431,8 @@ function zeigeHeute(){
   $('inhalt').innerHTML=h;
   clearInterval(S.uhrTimer);
   if(l) S.uhrTimer=setInterval(function(){ var u=$('uhr'); if(u) u.textContent=laufzeit(S.laufend||l); }, 15000);
-  wischen($('inhalt'), function(r){ if(r<0) gehe('kalender'); });
+  swipeAktivieren($('inhalt'));
+  wischen($('inhalt'), function(r){ if(r<0 && !wischen.sperre) gehe('kalender'); });
 }
 function laufzeit(l){ if(!l) return ''; var j=jetztZeit(), sameDay=l.datum===heuteIso(); var min = sameDay ? minDiff(l.start, l.pauseStart||j) - l.pause : 0; min=Math.max(0,min); return Math.floor(min/60)+':'+zwei(min%60); }
 function bsListe(fn){
@@ -474,12 +480,12 @@ function eintragsListe(liste, datum, m){
   if(!liste.length) h+='<div class="leer">'+L('kein')+'</div>';
   liste.forEach(function(e){
     var darf = !m.gesperrt || S.nutzer.rolle==='admin';
-    if(e.typ!=='A'){ h+='<button class="eintrag" '+(darf?'onclick="eintragForm(\''+e.id+'\')"':'')+'><span class="pill '+(e.typ==='U'?'p-blau':'p-rot')+'">'+(e.typ==='U'?'🏖 '+Lt('urlaub'):'🤒 '+Lt('krank'))+'</span></button>'; return; }
+    if(e.typ!=='A'){ h+=swAuf(e,darf)+'<button class="eintrag" '+(darf?'onclick="eintragForm(\''+e.id+'\')"':'')+'><span class="pill '+(e.typ==='U'?'p-blau':'p-rot')+'">'+(e.typ==='U'?'🏖 '+Lt('urlaub'):'🤒 '+Lt('krank'))+'</span></button>'+swZu(); return; }
     var laeuft=!e.ende;
-    h+='<button class="eintrag" '+(darf?'onclick="eintragForm(\''+e.id+'\')"':'')+'><div class="k"><span class="bsn">'+esc(bsName(e.baustelle))+'</span><span class="std">'+(laeuft?'<span class="pill p-gelb">● '+e.start+'</span>':fStd(std(e))+' '+Lt('stdKurz').split(' / ').pop())+'</span></div>'+
+    h+=swAuf(e,darf)+'<button class="eintrag" '+(darf?'onclick="eintragForm(\''+e.id+'\')"':'')+'><div class="k"><span class="bsn">'+esc(bsName(e.baustelle))+'</span><span class="std">'+(laeuft?'<span class="pill p-gelb">● '+e.start+'</span>':fStd(std(e))+' '+Lt('stdKurz').split(' / ').pop())+'</span></div>'+
       '<div class="info">'+e.start+' – '+(e.ende||'…')+(e.pause?' · '+Lt('pauseBisher').split(' / ').pop()+' '+e.pause+' Min.':'')+(e.km!==''&&e.km!=null&&+e.km>0?' · '+e.km+' km':'')+'</div>'+
       (e.taetigkeit?'<div class="taet">'+esc(e.taetigkeit)+'</div>':'')+
-      (e.material&&e.material.length?'<ul>'+e.material.map(function(x){return '<li>'+esc((x.menge?x.menge+' ':'')+(x.einheit?x.einheit+' ':'')+x.text)+'</li>';}).join('')+'</ul>':'')+'</button>';
+      (e.material&&e.material.length?'<ul>'+e.material.map(function(x){return '<li>'+esc((x.menge?x.menge+' ':'')+(x.einheit?x.einheit+' ':'')+x.text)+'</li>';}).join('')+'</ul>':'')+'</button>'+swZu();
   });
   var summe = liste.reduce(function(s,e){return s+std(e);},0);
   var pw = pausenWarnung(liste); if(pw) h+='<div class="hinweis">⚠ '+pw+'</div>';
@@ -502,6 +508,32 @@ function pausenWarnung(liste){
   if(p>=soll) return '';
   return tr() ? '<b>Mola eksik: '+p+' dk, en az '+soll+' dk gerekli</b><br>Zu wenig Pause: '+p+' Min., mindestens '+soll+' Min. nötig'
               : 'Zu wenig Pause: '+p+' Min. gebucht, bei '+fStd(h)+' Std. Arbeit mindestens '+soll+' Min. nötig';
+}
+/* ======================= Wischen zum Löschen ======================= */
+function swAuf(e, darf){ return darf ? '<div class="sw" data-id="'+e.id+'"><button class="weg" onclick="eintragWeg(\''+e.id+'\')">🗑<span>'+(tr()?'Sil':'Löschen')+'</span></button><div class="vorne">' : '<div><div>'; }
+function swZu(){ return '</div></div>'; }
+function swipeAktivieren(root){
+  if(!root) return;
+  root.querySelectorAll('.sw').forEach(function(sw){
+    var v=sw.querySelector('.vorne'), x0=null, y0=null, dx=0, offen=false, horiz=null;
+    var zu=function(){ offen=false; v.style.transform=''; };
+    v.addEventListener('pointerdown',function(e){ x0=e.clientX; y0=e.clientY; dx=0; horiz=null; v.classList.add('zieht'); });
+    v.addEventListener('pointermove',function(e){ if(x0===null) return; var mx=e.clientX-x0, my=e.clientY-y0;
+      if(horiz===null && (Math.abs(mx)>8||Math.abs(my)>8)) horiz=Math.abs(mx)>Math.abs(my);
+      if(!horiz) return; dx=Math.max(-110,Math.min(0,(offen?-96:0)+mx)); v.style.transform='translateX('+dx+'px)'; wischen.sperre=true; });
+    var ende=function(){ if(x0===null) return; v.classList.remove('zieht'); x0=null;
+      if(horiz){ if(dx<-45){ offen=true; v.style.transform='translateX(-96px)'; } else zu(); v.dataset.gewischt='1'; setTimeout(function(){ v.dataset.gewischt=''; wischen.sperre=false; },350); } };
+    v.addEventListener('pointerup',ende); v.addEventListener('pointercancel',ende); v.addEventListener('pointerleave',ende);
+    v.addEventListener('click',function(e){ if(v.dataset.gewischt||offen){ e.stopPropagation(); e.preventDefault(); if(offen&&!v.dataset.gewischt) zu(); } }, true);
+  });
+}
+function eintragWeg(id){
+  var e=findeEintrag(id); if(!e) return;
+  var datum=e.datum, ausKal=$('blatt').classList.contains('an');
+  frage(L('sicherLoeschen'), '🗑 '+L('loeschen'), function(){
+    rufe('eintragLoeschen',{id:id, ma:e.ma, monat:monatVon(datum)}).then(function(m){ monatSetzen(m); if(S.laufend&&S.laufend.id===id) S.laufend=null; toast('🗑 ✓'); render(); if(ausKal) tagDetail(datum); })
+      .catch(function(f){ toast(fehlerText(f)); });
+  });
 }
 function tagStatus(datum, zu){
   var ma = S.ansicht==='kalender' ? S.ma : S.nutzer.id;
@@ -592,6 +624,7 @@ function tagDetail(iso){
   if(d.gesperrt && S.nutzer.rolle!=='admin') h+='<div class="hinweis">🔒 '+Lt('gesperrt')+'</div>';
   h+=eintragsListe(es, iso, d);
   oeffneBlatt(h);
+  swipeAktivieren($('blatt'));
 }
 
 /* ======================= Eintrag bearbeiten ======================= */
