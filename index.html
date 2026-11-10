@@ -236,7 +236,7 @@ var TX = {
   pauseBisher:['Mola','Pause'], navi:['Yol tarifi','Navigation'], offenTage:['Kapatılmamış gün','Offene Tage'],
   sprechen:['Konuş','Sprechen'], reise:['Yol','Reise'], reiseLang:['Kendi arabamla','Fahrt mit eigenem Auto'],
   abfahrt:['Evden çıkış','Abfahrt von zu Hause'], ankunft:['Eve varış','Ankunft zu Hause'], kmGes:['Toplam km (gidiş + dönüş)','Kilometer gesamt (hin + zurück)'],
-  uebern:['Konaklama (eve dönmedim)','Übernachtung (nicht nach Hause)'], jetzt:['şimdi','jetzt'], uu:['Ücretsiz izin','Unbez. Urlaub'], geldNeu:['Para aldım','Geld bekommen'], betrag:['Tutar €','Betrag €'], mListe:['Aylık liste','Monatsliste'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
+  uebern:['Konaklama (eve dönmedim)','Übernachtung (nicht nach Hause)'], jetzt:['şimdi','jetzt'], uu:['Ücretsiz izin','Unbez. Urlaub'], geldNeu:['Para aldım','Geld bekommen'], betrag:['Tutar €','Betrag €'], mListe:['Aylık liste','Monatsliste'], mListeKnopf:['Saat listesi ve para','Stundenzettel & Geld'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
   mGezahlt:['Ödenen maaş','Lohn ausgezahlt'], mVorschuss:['Avans','Vorschuss'], mRest:['Kalan','Rest'], mSchuld:['Borç','Schuld'], mGuthaben:['Alacak','Guthaben'], ergaenzen:['Düzenle','Ergänzen'], aufmass:['Ölçü','Aufmaß'],
   amTippen:['Daireyi noktaya getir, ＋ bas','Kreis auf den Punkt richten und ＋ drücken'], amSuchen:['Telefonu yavaşça sağa sola hareket ettirin…','Handy langsam hin und her bewegen – Kamera nicht abdecken'], amPunkt:['Nokta','Punkt setzen'],
   amUebernehmen:['Kaydet','Übernehmen'], amNeu:['Yeni çizgi','Neue Linie'], amZurueck:['Geri','Zurück'], amGesamt:['Toplam','Gesamt'], foto:['Fotoğraf','Foto'], beleg:['Fiş / Fatura','Beleg'], stopp:['Bitir','Fertig'],
@@ -744,13 +744,13 @@ function zeigeKalender(){
     h+='<button class="'+kl.join(' ')+'" onclick="tagDetail(\''+iso+'\')"><span class="n">'+t+'</span><span class="h">'+esc(unten)+'</span></button>';
   }
   h+='</div></div>';
+  h+='<button class="gross b-navy" style="margin-top:10px" onclick="monatsliste()">📄 '+L('mListeKnopf')+'</button>';
   var s=d.eintraege.reduce(function(a,e){ if(e.typ==='U')a.u++; else if(e.typ==='K')a.k++; else if(e.typ==='UU'){} else {a.h+=std(e); a.t[e.datum]=1;} return a; },{h:0,u:0,k:0,t:{}});
   h+='<div class="summe"><div class="kachel"><div class="w">'+fStd(s.h)+'</div><div class="l">'+Lt('gesamt')+'</div></div><div class="kachel"><div class="w">'+Object.keys(s.t).length+'</div><div class="l">'+Lt('tage')+'</div></div>'+
      '<div class="kachel"><div class="w">'+s.u+'</div><div class="l">'+Lt('urlaub')+(d.urlaubKonto&&d.urlaubKonto.anspruch?'<br><b style="color:var(--blau)">'+(tr()?'Kalan ':'Rest ')+d.urlaubKonto.rest+' / '+d.urlaubKonto.anspruch+'</b>':'')+'</div></div><div class="kachel"><div class="w">'+s.k+'</div><div class="l">'+Lt('krank')+'</div></div></div>';
   if(d.gesperrt) h+='<div class="hinweis">🔒 '+Lt('gesperrt')+'</div>';
   if(mo!==monatVon(heute)) h+='<button class="mittel b-hell" onclick="S.kalMonat=monatVon(heuteIso());zeigeKalender()">'+L('zuHeute')+'</button><div style="height:8px"></div>';
   if(!d.gesperrt||S.nutzer.rolle==='admin') h+='<button class="mittel b-hell" onclick="abwesenheitForm()">🏖 '+L('abwesend')+'</button>';
-  h+='<div style="height:8px"></div><button class="mittel b-hell" onclick="monatsliste()">📄 '+L('mListe')+'</button>';
   h+='<div class="legende"><span class="pill p-gruen">■ '+Lt('tagZu')+'</span><span class="pill" style="background:#fff;border:2px solid #9fd3ad;color:var(--gruen)">'+(tr()?'Açık / ':'')+'Offen</span><span class="pill p-blau">'+Lt('urlaub')+'</span><span class="pill p-rot">'+Lt('krank')+'</span><span class="pill p-grau">'+Lt('feiertag')+'</span></div>';
   if(fl) h+='<div class="karte jliste" id="jliste" style="margin-top:12px"><div class="leer">…</div></div>';
   $('inhalt').innerHTML=h;
@@ -1229,6 +1229,9 @@ function monatsliste(){
 }
 function mlZeigen(r){
   var adm=S.nutzer.rolle==='admin', h='<h2>📄 '+L('mListe')+' · '+esc(r.name)+'</h2><div class="klein" style="margin:-6px 0 8px">'+r.monat.slice(5)+'/'+r.monat.slice(0,4)+'</div>';
+  var neg0=r.rest!=null&&r.rest<0;
+  h+='<div class="karte" style="margin:0 0 10px"><div class="zeileL"><span>'+L('mStd')+'</span><b>'+String(r.summe.bezahlt).replace('.',',')+' h</b></div>'+
+    (r.rest!=null?'<div class="zeileL" style="font-size:1.15rem"><span>'+L('mRest')+'</span><b style="color:'+(neg0?'var(--rot)':'var(--gruen)')+'">'+eur2(r.rest)+'</b></div><div class="klein" style="text-align:right">'+(neg0?Lt('mSchuld'):Lt('mGuthaben'))+' · '+(tr()?'detay aşağıda ↓':'Details unten ↓')+'</div>':'')+'</div>';
   h+='<div class="mlTab">'+r.tage.map(function(t){
     var g=t.geld.map(function(x){ return '<div class="mlGeld">💶 '+(x.art==='vorschuss'?Lt('mVorschuss'):x.art==='lohn'?Lt('mGezahlt'):'Sonstiges')+' '+eur2(x.betrag)+(x.notiz?' · '+esc(x.notiz):'')+(adm?' <button class="link" onclick="zahlungWeg(\''+x.id+'\',\''+r.ma+'\',\''+r.monat+'\')">✕</button>':'')+'</div>'; }).join('');
     if(!t.zeilen.length && !g) return '<div class="mlZ leer2"><span class="mlD">'+t.wt+' '+t.tag+'</span></div>';

@@ -1,6 +1,6 @@
 // Immer zuerst die neueste Version vom Server holen (ohne Browser-Zwischenspeicher),
 // nur ohne Netz die gespeicherte Kopie nehmen.
-const CACHE = 'ze-v5';
+const CACHE = 'ze-v6';
 const DATEIEN = ['./', './index.html', './mini.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(DATEIEN.map(u => new Request(u, { cache: 'reload' }))))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== CACHE).map(x => caches.delete(x)))).then(() => self.clients.claim())); });
