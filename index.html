@@ -219,7 +219,7 @@ var TX = {
   nachher:['Malzeme ve km ekle','Material & km ergänzen'], nichtJetzt:['Şimdi değil','Nicht jetzt'],
   sicherLoeschen:['Bu kayıt silinsin mi?','Eintrag wirklich löschen?'], tagLaeuft:['Çalışma devam ediyor','Arbeit läuft noch'],
   pauseBisher:['Mola','Pause'], navi:['Yol tarifi','Navigation'], offenTage:['Kapatılmamış gün','Offene Tage'],
-  sprechen:['Konuş','Sprechen'], foto:['Fotoğraf','Foto'], beleg:['Fiş / Fatura','Beleg'], stopp:['Bitir','Fertig'],
+  sprechen:['Konuş','Sprechen'], ergaenzen:['Düzenle','Ergänzen'], foto:['Fotoğraf','Foto'], beleg:['Fiş / Fatura','Beleg'], stopp:['Bitir','Fertig'],
   kiLaeuft:['Yapay zeka çalışıyor…','KI arbeitet…'], belegOk:['Fiş kaydedildi','Beleg gespeichert'], mikroNein:['Mikrofon izni yok','Kein Zugriff aufs Mikrofon'],
   kiNichts:['Anlaşılamadı – tekrar deneyin','Nichts erkannt – bitte nochmal'], kiPruefen:['Lütfen kontrol edin','Bitte kurz prüfen']
 };
@@ -440,6 +440,11 @@ function zeigeHeute(){
         ? '<button class="mittel b-gruen" style="color:#fff" onclick="stempel(\'weiter\')">▶ '+L('weiter')+'</button>'
         : '<button class="mittel b-gelb" style="color:#fff" onclick="stempel(\'pause\')">❚❚ '+L('pause')+'</button>')+
        '<button class="mittel b-hell" onclick="wechselDialog()">⇄ '+L('bsWechseln')+'</button></div>';
+    h+='<div class="kiReihe" style="margin-bottom:10px">'+
+       '<button onclick="laufendKi(\'sprache\')">🎤 '+L('sprechen')+'</button>'+
+       '<button onclick="laufendKi(\'foto\')">📷 '+L('foto')+'</button>'+
+       '<button onclick="laufendKi(\'beleg\')">🧾 '+L('beleg')+'</button>'+
+       '<button onclick="laufendKi(\'form\')">✏️ '+L('ergaenzen')+'</button></div>';
     h+='<button class="gross b-rot" onclick="stempel(\'ende\')">■ '+L('feierabend')+'</button>';
   }
   h+='</div>';
@@ -725,6 +730,15 @@ var KI={rec:null};
 function kiKnopf(id, zustand, text){ var b=$(id); if(!b) return; b.classList.remove('rec','ki'); if(zustand) b.classList.add(zustand); if(text!=null) b.innerHTML=text; }
 function kiKnopfReset(){ formLesen(); zeichneForm(); }
 function kiFehler(f){ toast(f&&f.fehler&&/^KI: /.test(f.fehler)?'KI: '+(tr()?'hata / ':'')+'Fehler':fehlerText(f)); kiKnopfReset(); }
+// Vom Heute-Bildschirm direkt in den laufenden Eintrag springen
+function laufendKi(was){
+  var l=S.laufend; if(!l) return;
+  if(!findeEintrag(l.id)) return toast('…');
+  eintragForm(l.id);
+  if(was==='sprache') kiSprache('material');
+  else if(was==='foto'||was==='beleg') kiBild(was);
+  else setTimeout(function(){ var el=$('fMat'); if(el) el.scrollIntoView({block:'center'}); },150);
+}
 function kiSprache(feld){
   if(KI.rec){ if(KI.rec.feld===feld) KI.rec.stopp(); return; }
   if(!S.kiAktiv) return toast(Lt('KI_FEHLT'));

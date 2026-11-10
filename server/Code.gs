@@ -98,7 +98,8 @@ var AKTIONEN = {
   kiSprache:      { ohneLock: true, fn: function (ich, d) { return kiSprache_(ich, d); } },
   kiFoto:         { ohneLock: true, fn: function (ich, d) { return kiFoto_(ich, d); } },
   belegHochladen: { ohneLock: true, fn: function (ich, d) { return belegHochladen_(ich, d); } },
-  kiSchluessel:   { admin: true, fn: function (ich, d) { return kiSchluessel_(d); } }
+  kiSchluessel:   { admin: true, fn: function (ich, d) { return kiSchluessel_(d); } },
+  kiDiagnose:     { admin: true, ohneLock: true, fn: function (ich, d) { return kiDiagnose_(); } }
 };
 
 /* ============================ KI (Google Gemini) ============================ */
@@ -118,6 +119,23 @@ function kiSchluessel_(d) {
     if (alt) props.setProperty('KI_KEY', alt); else props.deleteProperty('KI_KEY'); throw new Error('Schlüssel funktioniert nicht: ' + x.message); }
   return { kiAktiv: true };
 }
+function kiDiagnose_() {
+  var key = PropertiesService.getScriptProperties().getProperty('KI_KEY'), aus = [];
+  KI_MODELLE.forEach(function (mo) {
+    var t0 = Date.now();
+    var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + mo + ':generateContent', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
+      payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Antworte nur mit {"ok":true}' }] }], generationConfig: kiConfig_(mo) }) });
+    aus.push(mo + ': ' + r.getResponseCode() + ' in ' + (Date.now() - t0) + ' ms ' + (r.getResponseCode() === 200 ? '' : r.getContentText().slice(0, 120)));
+  });
+  return aus;
+}
+function kiConfig_(modell) {
+  var c = { responseMimeType: 'application/json', temperature: 0.2 };
+  if (/2\.5/.test(modell)) c.thinkingConfig = { thinkingBudget: 0 };
+  else c.thinkingConfig = { thinkingLevel: 'low' };
+  return c;
+}
 function kiAktiv_() { return !!PropertiesService.getScriptProperties().getProperty('KI_KEY'); }
 
 /** Schickt Teile (Text/Bild/Audio) an Gemini und gibt das JSON der Antwort zurück. */
@@ -130,7 +148,7 @@ function kiFrage_(teile) {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true,
       headers: { 'x-goog-api-key': key },
       payload: JSON.stringify({ contents: [{ role: 'user', parts: teile }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.2 } })
+        generationConfig: kiConfig_(KI_MODELLE[i]) })
     });
     var code = r.getResponseCode(), txt = r.getContentText();
     if (code === 200) {
