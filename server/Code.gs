@@ -19,6 +19,7 @@ var APP = {
 
 var T = {
   MA:  { name: 'Mitarbeiter', kopf: ['id', 'name', 'pinHash', 'rolle', 'sprache', 'aktiv', 'urlaubJahr', 'urlaubStartJahr', 'urlaubStartGenommen', 'ntfy', 'stundenlohn', 'saldoStart', 'saldoMonat'] },
+  RP:  { name: 'Reisepunkte', kopf: ['id', 'ma', 'datum', 'art', 'zeit', 'lat', 'lng', 'gen'] },
   Z:   { name: 'Zahlungen',   kopf: ['id', 'ma', 'datum', 'art', 'betrag', 'notiz'] },
   ME:  { name: 'Nachrichten', kopf: ['id', 'von', 'an', 'zeit', 'baustelle', 'art', 'text', 'gelesen'] },
   BS:  { name: 'Baustellen',  kopf: ['id', 'name', 'adresse', 'aktiv', 'erstellt', 'fuer', 'ordner'] },
@@ -106,6 +107,9 @@ var AKTIONEN = {
   baustelleNeu:   { fn: function (ich, d) { return baustelleNeu_(ich, d); } },
   meldungFoto:    { ohneLock: true, fn: function (ich, d) { return meldungFoto_(ich, d); } },
   materialAblegen:{ ohneLock: true, fn: function (ich, d) { return materialAblegen_(String(d.baustelle || '')); } },
+  reisePunkt:     { fn: function (ich, d) { return reisePunkt_(ich, d); } },
+  reisePunkte:    { fn: function (ich, d) { return reisePunkte_(welcherMa_(ich, d.ma), String(d.datum || '')); } },
+  reiseKm:        { fn: function (ich, d) { return reiseKm_(welcherMa_(ich, d.ma), String(d.datum || '')); } },
   reiseSpeichern: { fn: function (ich, d) { return reiseSpeichern_(ich, d); } },
   lohnliste:      { fn: function (ich, d) { return lohnliste_(ich, d); } },
   zahlungSpeichern:{ fn: function (ich, d) { return zahlungSpeichern_(ich, d); } },
@@ -1358,4 +1362,44 @@ function materialAblegen_(bsId) {
   [4, Object.keys(summe).length + 6].forEach(function (r) { sh.getRange(r, 1, 1, 6).setFontWeight('bold'); });
   sh.setColumnWidth(4, 260); sh.setColumnWidth(5, 260);
   return { ok: true, url: ss.getUrl() };
+}
+
+/* ---------- Reise-Kontrollpunkte: 4 Knöpfe speichern Uhrzeit + Standort (nur in diesem Moment) ---------- */
+var REISE_ARTEN = { abfahrt: 'Abfahrt zu Hause', ankunftBs: 'Ankunft Baustelle', abfahrtBs: 'Abfahrt Baustelle', ankunft: 'Ankunft zu Hause' };
+function reisePunkt_(ich, d) {
+  kopfPruefen_(T.RP);
+  pruefeDatum_(d.datum);
+  if (!REISE_ARTEN[d.art]) throw new Error('Falsche Art');
+  var zeit = /^\d{2}:\d{2}$/.test(String(d.zeit || '')) ? String(d.zeit) : Utilities.formatDate(new Date(), APP.zeitzone, 'HH:mm');
+  var lat = Number(d.lat), lng = Number(d.lng), gen = Math.round(Number(d.gen) || 0);
+  var ok = isFinite(lat) && isFinite(lng) && Math.abs(lat) > 0.01;
+  // gleicher Punkt am selben Tag wird ersetzt
+  zeilen_(T.RP).filter(function (p) { return p.ma === ich.id && p.datum === d.datum && p.art === d.art; }).forEach(function (p) { loeschen_(T.RP, p.id); });
+  schreiben_(T.RP, { id: Utilities.getUuid().slice(0, 8), ma: ich.id, datum: d.datum, art: d.art, zeit: zeit, lat: ok ? lat.toFixed(6) : '', lng: ok ? lng.toFixed(6) : '', gen: ok ? gen : '' });
+  if (ich.rolle !== 'admin') { var m = finde_(T.MA, ich.id); pushAnAdmin_('🚗 ' + ((m && m.name) || ich.id) + ': ' + REISE_ARTEN[d.art], zeit + ' Uhr' + (ok ? '' : ' (ohne Standort)')); }
+  return reisePunkte_(ich.id, d.datum);
+}
+function reisePunkte_(ma, datum) {
+  var reihen = ['abfahrt', 'ankunftBs', 'abfahrtBs', 'ankunft'];
+  var p = zeilen_(T.RP).filter(function (x) { return x.ma === ma && x.datum === datum; })
+    .map(function (x) { return { art: x.art, text: REISE_ARTEN[x.art] || x.art, zeit: wert_(x.zeit, 'start'), lat: x.lat === '' ? null : Number(x.lat), lng: x.lng === '' ? null : Number(x.lng), gen: x.gen === '' ? null : Number(x.gen) }; })
+    .sort(function (a, b) { return reihen.indexOf(a.art) - reihen.indexOf(b.art); });
+  return { ma: ma, datum: datum, punkte: p };
+}
+/** Fahrstrecke per Google Maps: Hinweg (Abfahrt → Ankunft Baustelle) + Rückweg (Abfahrt Baustelle → Ankunft zu Hause). */
+function reiseKm_(ma, datum) {
+  var p = {}; reisePunkte_(ma, datum).punkte.forEach(function (x) { p[x.art] = x; });
+  var strecke = function (a, b) {
+    if (!a || !b || a.lat == null || b.lat == null) return null;
+    try {
+      var r = Maps.newDirectionFinder().setOrigin(a.lat, a.lng).setDestination(b.lat, b.lng).setMode(Maps.DirectionFinder.Mode.DRIVING).getDirections();
+      if (r && r.routes && r.routes[0]) return r.routes[0].legs[0].distance.value / 1000;
+    } catch (x) {}
+    var R = 6371, dLat = (b.lat - a.lat) * Math.PI / 180, dLng = (b.lng - a.lng) * Math.PI / 180;
+    var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.asin(Math.sqrt(h)) * 1.3; // Luftlinie + 30 %, falls Maps nicht antwortet
+  };
+  var hin = strecke(p.abfahrt, p.ankunftBs), rueck = strecke(p.abfahrtBs, p.ankunft);
+  var km = (hin || 0) + (rueck || 0);
+  return { hin: hin == null ? null : Math.round(hin), rueck: rueck == null ? null : Math.round(rueck), km: Math.round(km) };
 }

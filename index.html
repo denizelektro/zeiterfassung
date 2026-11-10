@@ -138,6 +138,8 @@
   .mikro{padding:7px 12px;border-radius:99px;background:#fff;border:1px solid #cfd5dc;font-weight:700;font-size:.85rem;margin-top:8px}
   .tag.uu{background:#eceff3;color:#556}
   .p-grau{background:#eceff3;color:#556}
+  .rpZ{display:flex;justify-content:space-between;align-items:center;padding:8px 2px;border-bottom:1px solid #eef0f3;gap:8px}
+  .rpZ small{color:#778}
   .reiseK .reiseZeit{font-size:1.6rem;font-weight:800;color:var(--navy)}
   .mlTab{background:#fff;border-radius:12px;padding:4px 8px;font-size:.88rem}
   .mlZ{display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid #eef0f3}
@@ -442,9 +444,7 @@ function zeigeHeute(reise){
   h+='<div class="karte" style="padding-bottom:6px"><div style="font-size:1.1rem">'+datumText(heute)+'</div></div>';
   var heuteA = m.eintraege.filter(function(e){ return e.datum===heute && e.typ==='A'; });
   var R = reiseStand(heuteA);
-  if(reise) h+='<div class="karte reiseK"><p class="titel">🚗 '+L('abfahrt')+'</p>'+(R.abfahrt
-      ? '<div class="reiseZeit">'+R.abfahrt+' <button class="link" onclick="abfahrtAendern()">✏️</button></div>'
-      : '<button class="gross b-navy" onclick="abfahrtJetzt()">🚗 '+L('abfahrt')+' – '+Lt('jetzt').split(' / ').pop()+'</button>')+'</div>';
+  if(reise){ h+=punktKarte(['abfahrt','ankunftBs']); if(!S.reiseP||S.reiseP.datum!==heute) reisePLaden(); }
   if(m.gesperrt) h+='<div class="hinweis">'+Lt('gesperrt')+'</div>';
   h+='<div class="karte" id="stempel">';
   if(!l){
@@ -469,10 +469,9 @@ function zeigeHeute(reise){
   }
   h+='</div>';
   if(reise){
-    h+='<div class="karte reiseK"><p class="titel">🏠 '+L('ankunft')+'</p>'+(R.ankunft
-      ? '<div class="reiseZeit">'+R.ankunft+(R.km!==''?' · '+R.km+' km':'')+(R.uebern?' · 🛏':'')+' <button class="link" onclick="reiseForm()">✏️</button></div>'
-      : '<button class="gross b-blau" onclick="reiseForm()">🏠 '+L('ankunft')+'</button>')+
-      '<p class="klein">'+(tr()?'Sadece kendi arabanla tek başına gittiğinde kullan.<br>':'')+'Nur nutzen, wenn du allein mit deinem eigenen Auto fährst.</p></div>';
+    h+=punktKarte(['abfahrtBs','ankunft']);
+    if(R.ankunft||R.km!=='') h+='<div class="karte reiseK"><div class="reiseZeit" style="font-size:1.2rem">🧾 '+(R.abfahrt||'?')+' – '+(R.ankunft||'?')+(R.km!==''?' · '+R.km+' km':'')+(R.uebern?' · 🛏':'')+' <button class="link" onclick="reiseForm()">✏️</button></div></div>';
+    h+='<p class="klein" style="margin:0 4px 12px">📍 '+(tr()?'Konum sadece bu düğmelere basınca bir kez kaydedilir.<br>':'')+'Der Standort wird nur beim Drücken dieser Knöpfe einmal gespeichert. Nur nutzen, wenn du allein mit deinem eigenen Auto fährst.</p>';
   }
   var heuteE = m.eintraege.filter(function(e){ return e.datum===heute; });
   h+='<div class="karte"><p class="titel">'+L('heuteGearbeitet')+'</p>'+eintragsListe(heuteE, heute, m)+'</div>';
@@ -486,8 +485,29 @@ function zeigeHeute(reise){
 function reiseStand(heuteA){
   var r={abfahrt:'',ankunft:'',km:'',uebern:false};
   heuteA.forEach(function(e){ if(e.abfahrt&&!r.abfahrt) r.abfahrt=e.abfahrt; if(e.ankunft) r.ankunft=e.ankunft; if(e.km!==''&&e.km!=null&&r.km==='') r.km=e.km; if(e.uebern) r.uebern=true; });
-  try{ var x=JSON.parse(LS.getItem('ze_reise')||'null'); if(x&&x.datum===heuteIso()&&!r.abfahrt) r.abfahrt=x.abfahrt; }catch(e){}
+  var P=(S.reiseP&&S.reiseP.datum===heuteIso())?S.reiseP.punkte:[];
+  P.forEach(function(p){ if(p.art==='abfahrt'&&!r.abfahrt) r.abfahrt=p.zeit; if(p.art==='ankunft'&&!r.ankunft) r.ankunft=p.zeit; });
   return r;
+}
+var RP_TXT={abfahrt:['🚗','Evden çıkış','Abfahrt von zu Hause'], ankunftBs:['📍','Şantiyeye vardım','An der Baustelle angekommen'], abfahrtBs:['🚗','Şantiyeden çıkış','Von der Baustelle losgefahren'], ankunft:['🏠','Eve vardım','Zu Hause angekommen']};
+function rpL(a){ var t=RP_TXT[a]; return tr()?'<b>'+t[1]+'</b><br><small>'+t[2]+'</small>':t[2]; }
+function punktKarte(arten){
+  var P=(S.reiseP&&S.reiseP.datum===heuteIso())?S.reiseP.punkte:[], h='<div class="karte reiseK">';
+  arten.forEach(function(a){ var p=P.filter(function(x){return x.art===a;})[0];
+    h+= p ? '<div class="rpZ"><span>'+RP_TXT[a][0]+' '+rpL(a)+'</span><b>'+p.zeit+(p.lat!=null?' ✓':' ⚠')+'</b></div>'
+          : '<button class="gross '+(a==='ankunft'?'b-blau':'b-navy')+'" style="margin:6px 0" onclick="reisePunktSetzen(\''+a+'\')">'+RP_TXT[a][0]+' '+rpL(a)+'</button>'; });
+  return h+'</div>';
+}
+function reisePLaden(){ rufeRoh('reisePunkte',{datum:heuteIso()}).then(function(r){ S.reiseP=r; if(S.ansicht==='reise') render(); }).catch(function(){}); }
+function standort(){ return new Promise(function(ok){ if(!navigator.geolocation) return ok(null);
+  navigator.geolocation.getCurrentPosition(function(p){ ok({lat:p.coords.latitude,lng:p.coords.longitude,gen:p.coords.accuracy}); }, function(){ ok(null); }, {enableHighAccuracy:true, timeout:20000, maximumAge:0}); }); }
+function reisePunktSetzen(art){
+  var zeit=jetztZeit(); toast('📍 …');
+  standort().then(function(pos){
+    if(!pos) toast((tr()?'Konum alınamadı / ':'')+'Standort nicht verfügbar – nur Uhrzeit gespeichert');
+    return rufe('reisePunkt',{datum:heuteIso(), art:art, zeit:zeit, lat:pos&&pos.lat, lng:pos&&pos.lng, gen:pos&&pos.gen});
+  }).then(function(r){ S.reiseP=r; toast('✓ '+zeit); render(); if(art==='ankunft') setTimeout(reiseForm,300); })
+    .catch(function(f){ toast(fehlerText(f)); });
 }
 function abfahrtJetzt(){ LS.setItem('ze_reise',JSON.stringify({datum:heuteIso(), abfahrt:jetztZeit()})); toast('✓ '+jetztZeit()); render(); }
 function abfahrtAendern(){
@@ -503,10 +523,11 @@ function reiseForm(datum){
   if(!heuteA.length) return toast((tr()?'Önce işe başla / ':'')+'Erst „Arbeit beginnen“ buchen');
   if(S.laufend && S.laufend.datum===datum) return toast((tr()?'Önce „İş bitti“ / ':'')+'Erst Feierabend buchen');
   var R=reiseStand(heuteA);
+  if(R.km==='' && !reiseForm.km){ rufeRoh('reiseKm',{datum:datum}).then(function(k){ if(k&&k.km){ var el=$('rKm'); if(el&&!el.value){ el.value=k.km; var hh=$('rKmInfo'); if(hh) hh.textContent='Google Maps: hin '+(k.hin==null?'?':k.hin)+' km + zurück '+(k.rueck==null?'?':k.rueck)+' km'; } } }).catch(function(){}); }
   oeffneBlatt('<h2>🏠 '+L('ankunft')+'</h2>'+
     '<div class="reihe"><div><label class="f">'+L('abfahrt','inl')+'</label><input type="time" class="eing" id="rAbf" value="'+(R.abfahrt||'')+'"></div>'+
     '<div><label class="f">'+L('ankunft','inl')+'</label><input type="time" class="eing" id="rAnk" value="'+(R.ankunft||jetztZeit())+'"></div></div>'+
-    '<label class="f">'+L('kmGes','inl')+'</label><input type="number" inputmode="decimal" class="eing" id="rKm" value="'+(R.km===''?'':R.km)+'" placeholder="z. B. 212">'+
+    '<label class="f">'+L('kmGes','inl')+'</label><input type="number" inputmode="decimal" class="eing" id="rKm" value="'+(R.km===''?'':R.km)+'" placeholder="z. B. 212"><div class="klein" id="rKmInfo"></div>'+
     '<label class="f" style="display:flex;align-items:center;gap:10px;margin-top:12px"><input type="checkbox" id="rUeb" '+(R.uebern?'checked':'')+' style="width:22px;height:22px"> '+L('uebern','inl')+'</label>'+
     '<p class="klein">'+(tr()?'İlk 20 km (her yön) 0,30 €, sonrası 0,38 € – uygulama hesaplar.<br>':'')+'Je Strecke die ersten 20 km × 0,30 €, darüber × 0,38 € – rechnet die App aus.</p>'+
     '<div id="fFehler"></div><button class="gross b-navy" onclick="reiseSpeichern(\''+datum+'\')">💾 '+L('speichern')+'</button>');
@@ -764,9 +785,16 @@ function tagDetail(iso){
   var h='<h2>'+datumText(iso)+'</h2>';
   if(ft) h+='<div style="margin-bottom:10px"><span class="pill p-grau">🎉 '+Lt('feiertag')+': '+esc(ft)+'</span></div>';
   if(d.gesperrt && S.nutzer.rolle!=='admin') h+='<div class="hinweis">🔒 '+Lt('gesperrt')+'</div>';
-  h+=eintragsListe(es, iso, d);
+  h+=eintragsListe(es, iso, d)+'<div id="tagReise"></div>';
   oeffneBlatt(h);
   swipeAktivieren($('blatt'));
+  if(es.some(function(e){return e.typ==='A';})) rufeRoh('reisePunkte',{ma:ma, datum:iso}).then(function(r){
+    var el=$('tagReise'); if(!el||!r.punkte.length) return;
+    var mitPos=r.punkte.filter(function(p){return p.lat!=null;});
+    el.innerHTML='<div class="karte" style="margin-top:10px"><p class="titel">🚗 '+L('reise')+'</p>'+r.punkte.map(function(p){
+      return '<div class="rpZ"><span>'+RP_TXT[p.art][0]+' '+rpL(p.art)+'</span><b>'+p.zeit+' '+(p.lat!=null?'<a class="link" target="_blank" href="https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng+'">📍</a>':'⚠')+'</b></div>'; }).join('')+
+      (mitPos.length>1?'<a class="mittel b-hell" style="text-decoration:none;margin-top:8px" target="_blank" href="https://www.google.com/maps/dir/'+mitPos.map(function(p){return p.lat+','+p.lng;}).join('/')+'">🗺 '+(tr()?'Rota / ':'')+'Route auf Karte</a>':'')+'</div>';
+  }).catch(function(){});
 }
 
 /* ======================= Eintrag bearbeiten ======================= */
