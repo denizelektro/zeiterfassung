@@ -103,6 +103,7 @@ var AKTIONEN = {
   abrechnung:     { admin: true, fn: function (ich, d) { return abrechnung_(d); } },
   abrechnungTabelle: { admin: true, fn: function (ich, d) { return abrechnungTabelle_(d); } },
   baustelleNeu:   { fn: function (ich, d) { return baustelleNeu_(ich, d); } },
+  importEintraege:{ admin: true, fn: function (ich, d) { return importEintraege_(d); } },
   kiSchluessel:   { admin: true, fn: function (ich, d) { return kiSchluessel_(d); } },
   kiDiagnose:     { admin: true, ohneLock: true, fn: function (ich, d) { return kiDiagnose_(d); } }
 };
@@ -1053,4 +1054,36 @@ function abrechnungTabelle_(d) {
   var alt = ziel.getFilesByName(titel); while (alt.hasNext()) alt.next().setTrashed(true);
   var f = DriveApp.getFileById(ss.getId()); f.moveTo(ziel);
   return { url: ss.getUrl(), ordner: ziel.getUrl() };
+}
+
+/* ============================ Import alter Stundenzettel (einmalig, nur Admin) ============================ */
+function importEintraege_(d) {
+  kopfPruefen_(T.E); kopfPruefen_(T.BS);
+  var aktiv = (d.aktiv || []).map(function (x) { return String(x).toLowerCase(); });
+  var bsIds = {}; zeilen_(T.BS).forEach(function (b) { bsIds[String(b.name).trim().toLowerCase()] = b.id; });
+  (d.baustellen || []).forEach(function (n) {
+    var k = String(n).trim().toLowerCase(); if (!k || bsIds[k]) return;
+    var id = Utilities.getUuid().slice(0, 8); bsIds[k] = id;
+    schreiben_(T.BS, { id: id, name: String(n).trim(), adresse: '', aktiv: aktiv.indexOf(k) >= 0 ? 'ja' : 'nein', erstellt: jetzt_(), fuer: '' });
+  });
+  var da = {}; zeilen_(T.E).forEach(function (e) { da[e.id] = 1; });
+  var kopf = T.E.kopf, neu = [], jetzt = jetzt_();
+  (d.eintraege || []).forEach(function (e) {
+    if (!e.id || da[e.id]) return;
+    pruefeDatum_(e.datum);
+    var z = { id: e.id, ma: e.ma, datum: e.datum, typ: e.typ, baustelle: e.typ === 'A' ? (bsIds[String(e.baustelle).trim().toLowerCase()] || '') : '',
+      start: e.start || '', ende: e.ende || '', pause: e.pause || 0, pauseStart: '', taetigkeit: e.taetigkeit || '', material: '[]',
+      km: e.km === '' || e.km == null ? '' : Number(e.km), geaendert: jetzt, belege: '' };
+    neu.push(kopf.map(function (k) { return z[k] === undefined ? '' : String(z[k]); }));
+    da[e.id] = 1;
+  });
+  if (neu.length) {
+    var sh = blatt_(T.E);
+    sh.getRange(sh.getLastRow() + 1, 1, neu.length, kopf.length).setNumberFormat('@').setValues(neu);
+    cacheLeeren_(T.E);
+  }
+  if (d.urlaub && d.urlaub.ma) {
+    aktualisieren_(T.MA, d.urlaub.ma, { urlaubJahr: d.urlaub.urlaubJahr, urlaubStartJahr: d.urlaub.urlaubStartJahr || '', urlaubStartGenommen: d.urlaub.urlaubStartGenommen || 0 });
+  }
+  return { neu: neu.length };
 }
