@@ -18,7 +18,8 @@ var APP = {
 };
 
 var T = {
-  MA:  { name: 'Mitarbeiter', kopf: ['id', 'name', 'pinHash', 'rolle', 'sprache', 'aktiv', 'urlaubJahr', 'urlaubStartJahr', 'urlaubStartGenommen', 'ntfy'] },
+  MA:  { name: 'Mitarbeiter', kopf: ['id', 'name', 'pinHash', 'rolle', 'sprache', 'aktiv', 'urlaubJahr', 'urlaubStartJahr', 'urlaubStartGenommen', 'ntfy', 'stundenlohn', 'saldoStart', 'saldoMonat'] },
+  Z:   { name: 'Zahlungen',   kopf: ['id', 'ma', 'datum', 'art', 'betrag', 'notiz'] },
   ME:  { name: 'Nachrichten', kopf: ['id', 'von', 'an', 'zeit', 'baustelle', 'art', 'text', 'gelesen'] },
   BS:  { name: 'Baustellen',  kopf: ['id', 'name', 'adresse', 'aktiv', 'erstellt', 'fuer'] },
   E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert', 'belege'] },
@@ -103,6 +104,10 @@ var AKTIONEN = {
   abrechnung:     { admin: true, fn: function (ich, d) { return abrechnung_(d); } },
   abrechnungTabelle: { admin: true, fn: function (ich, d) { return abrechnungTabelle_(d); } },
   baustelleNeu:   { fn: function (ich, d) { return baustelleNeu_(ich, d); } },
+  lohnliste:      { fn: function (ich, d) { return lohnliste_(ich, d); } },
+  zahlungSpeichern:{ admin: true, fn: function (ich, d) { return zahlungSpeichern_(ich, d); } },
+  zahlungLoeschen:{ admin: true, fn: function (ich, d) { loeschen_(T.Z, String(d.id || '')); return lohnliste_(ich, d); } },
+  lohnlisteDateien:{ admin: true, fn: function (ich, d) { return lohnlisteDateien_(ich, d); } },
   importEintraege:{ admin: true, fn: function (ich, d) { return importEintraege_(d); } },
   kiSchluessel:   { admin: true, fn: function (ich, d) { return kiSchluessel_(d); } },
   kiDiagnose:     { admin: true, ohneLock: true, fn: function (ich, d) { return kiDiagnose_(d); } }
@@ -337,7 +342,8 @@ function startDaten_(ich) {
   };
   if (ich.rolle === 'admin') {
     r.mitarbeiter = zeilen_(T.MA).map(function (m) { var o = oeffentlich_(m); o.aktiv = m.aktiv !== 'nein';
-      o.urlaubJahr = Number(m.urlaubJahr || 0); o.urlaubStartGenommen = Number(m.urlaubStartGenommen || 0); o.urlaubStartJahr = m.urlaubStartJahr || ''; return o; });
+      o.urlaubJahr = Number(m.urlaubJahr || 0); o.urlaubStartGenommen = Number(m.urlaubStartGenommen || 0); o.urlaubStartJahr = m.urlaubStartJahr || '';
+      o.stundenlohn = Number(m.stundenlohn || 0); o.saldoStart = m.saldoStart === '' || m.saldoStart == null ? '' : Number(m.saldoStart); o.saldoMonat = m.saldoMonat || ''; return o; });
     var maNamen = {}; zeilen_(T.MA).forEach(function (m) { maNamen[m.id] = m.name; });
     r.alleBaustellen = zeilen_(T.BS).map(function (b) { return { id: b.id, name: b.name, adresse: b.adresse, aktiv: b.aktiv !== 'nein', fuer: b.fuer || '', fuerName: b.fuer ? (maNamen[b.fuer] || b.fuer) : '' }; });
   }
@@ -580,6 +586,10 @@ function mitarbeiterSpeichern_(d) {
   var obj = { name: name, rolle: m.rolle === 'admin' ? 'admin' : 'mitarbeiter', sprache: m.sprache === 'tr' ? 'tr' : 'de', aktiv: m.aktiv === false ? 'nein' : 'ja' };
   if (m.urlaubJahr !== undefined && m.urlaubJahr !== '') obj.urlaubJahr = Math.max(0, Number(m.urlaubJahr) || 0);
   if (m.urlaubStartGenommen !== undefined && m.urlaubStartGenommen !== '') { obj.urlaubStartGenommen = Math.max(0, Number(m.urlaubStartGenommen) || 0); obj.urlaubStartJahr = heute_().slice(0, 4); }
+  kopfPruefen_(T.MA);
+  if (m.stundenlohn !== undefined && m.stundenlohn !== '') obj.stundenlohn = Math.max(0, Number(String(m.stundenlohn).replace(',', '.')) || 0);
+  if (m.saldoStart !== undefined) obj.saldoStart = m.saldoStart === '' ? '' : Number(String(m.saldoStart).replace(',', '.')) || 0;
+  if (m.saldoMonat !== undefined) obj.saldoMonat = /^\d{4}-\d{2}$/.test(String(m.saldoMonat)) ? String(m.saldoMonat) : '';
   if (m.pin) {
     if (!/^\d{4,8}$/.test(String(m.pin))) throw new Error('PIN muss 4–8 Ziffern haben');
     var h = hash_(String(m.pin));
@@ -866,7 +876,7 @@ function wert_(v, k) {
   if (Object.prototype.toString.call(v) === '[object Date]') {
     if (k === 'start' || k === 'ende' || k === 'pauseStart') return Utilities.formatDate(v, APP.zeitzone, 'HH:mm');
     if (k === 'datum') return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM-dd');
-    if (k === 'monat') return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM');
+    if (k === 'monat' || k === 'saldoMonat') return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM');
     return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM-dd HH:mm:ss');
   }
   return String(v);
@@ -1086,4 +1096,166 @@ function importEintraege_(d) {
     aktualisieren_(T.MA, d.urlaub.ma, { urlaubJahr: d.urlaub.urlaubJahr, urlaubStartJahr: d.urlaub.urlaubStartJahr || '', urlaubStartGenommen: d.urlaub.urlaubStartGenommen || 0 });
   }
   return { neu: neu.length };
+}
+
+/* ============================ Monatsliste (intern) mit Lohn, Vorschuss, Restschuld ============================ */
+var STD_AUSFALL = 8; // bezahlte Stunden für Krank-, Urlaubs- und Feiertage
+
+function zahlungSpeichern_(ich, d) {
+  kopfPruefen_(T.Z);
+  var z = d.zahlung || {};
+  pruefeDatum_(z.datum);
+  var betrag = Number(String(z.betrag).replace(',', '.'));
+  if (!betrag) throw new Error('Betrag fehlt');
+  var art = ['vorschuss', 'lohn', 'sonstiges'].indexOf(z.art) >= 0 ? z.art : 'vorschuss';
+  schreiben_(T.Z, { id: Utilities.getUuid().slice(0, 8), ma: String(z.ma || d.ma), datum: z.datum, art: art, betrag: betrag, notiz: String(z.notiz || '').slice(0, 120) });
+  return lohnliste_(ich, { ma: z.ma || d.ma, monat: z.datum.slice(0, 7) });
+}
+
+function monatPlus_(mo, n) { var j = +mo.slice(0, 4), m = +mo.slice(5, 7) - 1 + n; var d = new Date(j, m, 1); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); }
+
+/** Bezahlte Stunden eines Monats (Arbeit + Krank/Urlaub/Feiertag je 8 h) und Tageszeilen. */
+function monatsZeilen_(ma, mo) {
+  var m = finde_(T.MA, ma) || {}, mitFeiertag = m.rolle !== 'admin';
+  var es = zeilen_(T.E).filter(function (e) { return e.ma === ma && String(e.datum).slice(0, 7) === mo; }).map(eintragAus_)
+    .sort(function (a, b) { return (a.datum + (a.start || '')) < (b.datum + (b.start || '')) ? -1 : 1; });
+  var zs = zeilen_(T.Z).filter(function (z) { return z.ma === ma && String(z.datum).slice(0, 7) === mo; });
+  var bsN = {}; zeilen_(T.BS).forEach(function (b) { bsN[b.id] = b; });
+  var j = +mo.slice(0, 4), mm = +mo.slice(5, 7), letzter = new Date(j, mm, 0).getDate(), wt = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  var tage = [], sum = { arbeit: 0, krank: 0, urlaub: 0, feiertag: 0, bezahlt: 0, km: 0 };
+  for (var t = 1; t <= letzter; t++) {
+    var iso = mo + '-' + ('0' + t).slice(-2), dt = new Date(j, mm - 1, t, 12), w = dt.getDay();
+    var heute = es.filter(function (e) { return e.datum === iso; }), zeilen = [];
+    heute.forEach(function (e) {
+      if (e.typ === 'K' || e.typ === 'U') {
+        if (zeilen.some(function (z) { return z.typ === e.typ; })) return; // doppelte Abwesenheit nur einmal
+        zeilen.push({ typ: e.typ, text: e.typ === 'K' ? 'Krank' : 'Urlaub', std: STD_AUSFALL });
+        sum[e.typ === 'K' ? 'krank' : 'urlaub']++; sum.bezahlt += STD_AUSFALL;
+      } else {
+        var h = stunden_(e), b = bsN[e.baustelle] || {};
+        zeilen.push({ typ: 'A', text: b.name || '?', adresse: b.adresse || '', start: e.start, ende: e.ende || '', pause: Number(e.pause || 0), std: Math.round(h * 100) / 100, km: Number(e.km || 0), taetigkeit: e.taetigkeit || '' });
+        sum.arbeit += h; sum.bezahlt += h; sum.km += Number(e.km || 0);
+      }
+    });
+    var ft = feiertag_(iso);
+    if (ft && mitFeiertag && w !== 0 && w !== 6 && !zeilen.some(function (z) { return z.typ !== 'A'; })) { zeilen.unshift({ typ: 'F', text: 'Feiertag (' + ft + ')', std: STD_AUSFALL }); sum.feiertag++; sum.bezahlt += STD_AUSFALL; }
+    var geld = zs.filter(function (z) { return String(z.datum) === iso; }).map(function (z) { return { id: z.id, art: z.art, betrag: Number(z.betrag), notiz: z.notiz || '' }; });
+    tage.push({ datum: iso, tag: t, wt: wt[w], zeilen: zeilen, geld: geld });
+  }
+  var satz = Number(m.stundenlohn || 0);
+  var zahl = function (art) { return zs.filter(function (z) { return z.art === art; }).reduce(function (a, z) { return a + Number(z.betrag || 0); }, 0); };
+  var r2 = function (x) { return Math.round(x * 100) / 100; };
+  sum.arbeit = r2(sum.arbeit); sum.bezahlt = r2(sum.bezahlt);
+  return { tage: tage, summe: sum, satz: satz, lohn: r2(sum.bezahlt * satz), gezahltLohn: r2(zahl('lohn')), vorschuss: r2(zahl('vorschuss')), sonstiges: r2(zahl('sonstiges')) };
+}
+
+function lohnliste_(ich, d) {
+  kopfPruefen_(T.MA); kopfPruefen_(T.Z);
+  var ma = welcherMa_(ich, d.ma), mo = String(d.monat || heute_().slice(0, 7));
+  if (!/^\d{4}-\d{2}$/.test(mo)) throw new Error('Monat ungültig');
+  var m = finde_(T.MA, ma) || {}, r = monatsZeilen_(ma, mo);
+  var sm = String(m.saldoMonat || '').slice(0, 7);
+  // Vortrag (Restschuld) ab dem Startmonat fortschreiben
+  var vortrag = null;
+  if (sm && mo >= sm && m.saldoStart !== '' && m.saldoStart != null) {
+    vortrag = Number(String(m.saldoStart).replace(',', '.'));
+    for (var x = sm; x < mo; x = monatPlus_(x, 1)) { var v = monatsZeilen_(ma, x); vortrag += v.lohn - v.gezahltLohn - v.vorschuss - v.sonstiges; }
+    vortrag = Math.round(vortrag * 100) / 100;
+  }
+  r.vortrag = vortrag;
+  r.rest = vortrag == null ? null : Math.round((vortrag + r.lohn - r.gezahltLohn - r.vorschuss - r.sonstiges) * 100) / 100;
+  r.urlaub = urlaubKonto_(ma, mo.slice(0, 4));
+  r.urlaub.dieserMonat = r.summe.urlaub;
+  r.ma = ma; r.name = m.name || ma; r.monat = mo; r.rolle = m.rolle;
+  return r;
+}
+
+/* ---------- Dateien in Drive: Monatsliste (intern) + Reisekosten-/Stundennachweis (Steuerberater) ---------- */
+var ELEMAN_ORDNER_ID = '1J2ZRG-i6-Fcub6ZtlUih1QMOP5g456PL'; // Meine Ablage › Privat › Installation_Technik › eleman
+
+function alsXlsx_(ss, ordner, name) {
+  SpreadsheetApp.flush();
+  var url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx';
+  var blob = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } }).getBlob().setName(name);
+  var alt = ordner.getFilesByName(name); while (alt.hasNext()) alt.next().setTrashed(true);
+  var f = ordner.createFile(blob);
+  DriveApp.getFileById(ss.getId()).setTrashed(true);
+  return f;
+}
+function zeitWert_(hhmm) { if (!hhmm) return ''; var p = String(hhmm).split(':'); return (Number(p[0]) * 60 + Number(p[1])) / 1440; }
+
+function lohnlisteDateien_(ich, d) {
+  var L = lohnliste_(ich, d), j = L.monat.slice(0, 4), mo = L.monat.slice(5, 7);
+  var ordner = ordner_(DriveApp.getFolderById(ELEMAN_ORDNER_ID), j.slice(2));
+  var kurz = (String(L.name).trim()[0] || 'X').toUpperCase();
+  var vorname = String(L.name).split(' ')[0], nachname = String(L.name).split(' ').slice(1).join('_');
+
+  // 1) interne Monatsliste (wie A10)
+  var ss = SpreadsheetApp.create('tmp'), sh = ss.getSheets()[0], z = [];
+  z.push(['Monatsliste ' + L.name, '', '', '', '', '', mo + '/' + j.slice(2), '']);
+  z.push(['Urlaub', L.urlaub.anspruch, 'genommen', L.urlaub.genommen, 'Rest', L.urlaub.rest, 'diesen Monat', L.urlaub.dieserMonat]);
+  z.push(['', '', '', '', '', '', '', '']);
+  z.push(['Tag', 'Datum', 'Baustelle', 'Start', 'Ende', 'Pause', 'Stunden', 'Vorschuss']);
+  var start = z.length + 1;
+  L.tage.forEach(function (t) {
+    var vs = t.geld.filter(function (g) { return g.art === 'vorschuss'; }).reduce(function (a, g) { return a + g.betrag; }, 0);
+    if (!t.zeilen.length) { z.push([t.wt, t.tag, '', '', '', '', '', vs || '']); return; }
+    t.zeilen.forEach(function (r, i) {
+      z.push([t.wt, t.tag, r.text, r.start ? zeitWert_(r.start) : '', r.ende ? zeitWert_(r.ende) : '', r.typ === 'A' ? (r.pause || '') : '', r.std, i === 0 ? (vs || '') : '']);
+    });
+  });
+  var ende = z.length;
+  z.push(['', '', '', '', '', 'Gesamtstunden:', '=SUM(G' + start + ':G' + ende + ')', '']);
+  var g = z.length;
+  z.push(['', '', '', '', '', '× Stundenlohn', L.satz, '']);
+  z.push(['', '', '', '', '', 'Lohn (Anspruch)', '=G' + g + '*G' + (g + 1), '']);
+  z.push(['', '', '', '', '', 'Vortrag (kalan)', L.vortrag == null ? 0 : L.vortrag, '']);
+  z.push(['', '', '', '', '', '− Lohn gezahlt', L.gezahltLohn, '']);
+  z.push(['', '', '', '', '', '− Vorschüsse', '=SUM(H' + start + ':H' + ende + ')', '']);
+  z.push(['', '', '', '', '', '− Sonstiges', L.sonstiges, '']);
+  z.push(['', '', '', '', '', 'Rest (neg. = Schuld)', '=G' + (g + 2) + '+G' + (g + 3) + '-G' + (g + 4) + '-G' + (g + 5) + '-G' + (g + 6), '']);
+  sh.getRange(1, 1, z.length, 8).setValues(z);
+  sh.getRange(start, 4, ende - start + 1, 2).setNumberFormat('hh:mm');
+  sh.getRange(g, 7, 8, 1).setNumberFormat('#,##0.00');
+  sh.getRange(1, 1).setFontWeight('bold').setFontSize(13); sh.getRange(4, 1, 1, 8).setFontWeight('bold');
+  sh.getRange(g + 7, 6, 1, 2).setFontWeight('bold'); sh.setColumnWidth(3, 200);
+  var f1 = alsXlsx_(ss, ordner, kurz + Number(mo) + ' (App).xlsx');
+
+  // 2) Reisekostenabrechnung / Stundennachweis (Vorlage Steuerberater)
+  var s2 = SpreadsheetApp.create('tmp2'), b = s2.getSheets()[0], w = [];
+  w.push(['Mitarbeiter: ' + L.name, '', '', '', '', 'Reisekostenabrechnung', '', '', '', '', 'Monat / Jahr:', '', mo + '/' + j]);
+  w.push(['Datum', 'Abf. Heim', 'Ank. Heim', 'Abwesen Gesamt', 'Verpfl.-P.', 'Arb. Start', 'Arb. Ende', 'Pause (Minuten)', 'Arbeits-stunden', 'dienstl. gefahrene Km x 0,30 (1-20km)', 'dienstl. gefahrene Km x 0,38 (ab 21km)', 'Summe EUR', 'Ziel / Anlaß der Fahrt']);
+  var krank = 0, url = 0, fei = 0;
+  L.tage.forEach(function (t) {
+    var r = w.length + 1, arbeit = t.zeilen.filter(function (x) { return x.typ === 'A'; }), sonst = t.zeilen.filter(function (x) { return x.typ !== 'A'; });
+    var datum = new Date(+j, +mo - 1, t.tag);
+    if (arbeit.length) {
+      var st = arbeit[0].start, en = arbeit[arbeit.length - 1].ende, pause = arbeit.reduce(function (a, x) { return a + (x.pause || 0); }, 0);
+      // Lücken zwischen mehreren Baustellen als Pause zählen, damit die Stunden stimmen
+      for (var i = 1; i < arbeit.length; i++) if (arbeit[i - 1].ende && arbeit[i].start) pause += Math.max(0, minDiff_(arbeit[i - 1].ende, arbeit[i].start));
+      var km = arbeit.reduce(function (a, x) { return a + (x.km || 0); }, 0);
+      var ziel = arbeit.map(function (x) { return 'Baustelle ' + x.text + (x.adresse ? ' ' + x.adresse : ''); }).filter(function (v, k, a) { return a.indexOf(v) === k; }).join(' / ');
+      w.push([datum, '', '', '=IF(OR(B' + r + '="", C' + r + '=""), "", (C' + r + ' - B' + r + ') * 24)', '=IF(D' + r + '="", "", IF(D' + r + ' > 8, 14, 0))',
+        zeitWert_(st), en ? zeitWert_(en) : '', pause, '=IF(OR(F' + r + '="", G' + r + '=""), "", ((G' + r + ' - F' + r + ') - (IF(H' + r + '="", 0, H' + r + ') / 1440)) * 24)',
+        km ? Math.min(km, 40) : '', km > 40 ? km - 40 : '', '=(J' + r + '*0.3)+(K' + r + '*0.38)', ziel]);
+    } else {
+      var txt = sonst.length ? sonst[0].text.replace(/ \(.*\)$/, '') : '';
+      if (txt === 'Krank') krank++; else if (txt === 'Urlaub') url++; else if (txt === 'Feiertag') fei++;
+      w.push([datum, '', '', '', '', '', '', '', '', '', '', '=(J' + r + '*0.3)+(K' + r + '*0.38)', txt]);
+    }
+  });
+  var le = w.length;
+  w.push(['Zusammenfassung Monat', '', '', '', '', '', '', '', '', '', '', '', '']);
+  w.push(['Gesamt Arbeitsstunden :', '', '=SUM(I3:I' + le + ')', '', '', 'Summe Verpf.-P :', '', '=SUM(E3:E' + le + ')', '', '', 'Unterschrift Mitarbeiter:', '', '']);
+  w.push(['Anzahl Krankheit Tage :', '', krank, '', '', 'Summe Kilometerp.:', '', '=SUM(L3:L' + le + ')', '', '', '', '', '']);
+  w.push(['Anzahl Urlaub Tage :', '', url, '', '', '', '', '', '', '', '', '', '']);
+  w.push(['Anzahl Feier Tage :', '', fei, '', '', 'GESAMT:', '', '=SUM(H' + (le + 3) + '+H' + (le + 2) + ')', '', '', 'Unterschrift Arbeitgeber:', '', '']);
+  b.getRange(1, 1, w.length, 13).setValues(w);
+  b.getRange(3, 1, le - 2, 1).setNumberFormat('dd.mm.yyyy');
+  b.getRange(3, 2, le - 2, 2).setNumberFormat('hh:mm'); b.getRange(3, 6, le - 2, 2).setNumberFormat('hh:mm');
+  b.getRange(3, 4, le - 2, 1).setNumberFormat('0.00'); b.getRange(3, 9, le - 2, 1).setNumberFormat('0.00'); b.getRange(3, 12, le - 2, 1).setNumberFormat('#,##0.00');
+  b.getRange(2, 1, 1, 13).setFontWeight('bold').setWrap(true); b.getRange(1, 1, 1, 13).setFontWeight('bold');
+  b.getRange(le + 1, 1, 5, 13).setFontWeight('bold'); b.setColumnWidth(13, 320);
+  var f2 = alsXlsx_(s2, ordner, j + '_' + mo + '_Reisekostenabr.Stundennachw._' + vorname + '_' + nachname + '.xlsx');
+  return { intern: f1.getUrl(), steuer: f2.getUrl(), ordner: ordner.getUrl() };
 }

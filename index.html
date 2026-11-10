@@ -136,6 +136,12 @@
   .kiReihe .zw .de{font-size:.72rem}
   .lblZeile{display:flex;justify-content:space-between;align-items:flex-end}
   .mikro{padding:7px 12px;border-radius:99px;background:#fff;border:1px solid #cfd5dc;font-weight:700;font-size:.85rem;margin-top:8px}
+  .mlTab{background:#fff;border-radius:12px;padding:4px 8px;font-size:.88rem}
+  .mlZ{display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid #eef0f3}
+  .mlZ.leer2{opacity:.4}
+  .mlD{width:44px;flex:none;color:var(--grau,#667)}
+  .mlT{flex:1}.mlT small{display:block;color:#889;font-size:.75rem}
+  .mlGeld{font-size:.8rem;color:#7a4a00;padding:2px 0 4px 52px}
   .belege{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
   .belege span{background:#fff;border:1px solid #cfd5dc;border-radius:99px;padding:6px 10px;font-size:.82rem}
   .belege a{color:var(--navy);font-weight:600;text-decoration:none}
@@ -219,7 +225,8 @@ var TX = {
   nachher:['Malzeme ve km ekle','Material & km ergänzen'], nichtJetzt:['Şimdi değil','Nicht jetzt'],
   sicherLoeschen:['Bu kayıt silinsin mi?','Eintrag wirklich löschen?'], tagLaeuft:['Çalışma devam ediyor','Arbeit läuft noch'],
   pauseBisher:['Mola','Pause'], navi:['Yol tarifi','Navigation'], offenTage:['Kapatılmamış gün','Offene Tage'],
-  sprechen:['Konuş','Sprechen'], ergaenzen:['Düzenle','Ergänzen'], aufmass:['Ölçü','Aufmaß'],
+  sprechen:['Konuş','Sprechen'], mListe:['Aylık liste','Monatsliste'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
+  mGezahlt:['Ödenen maaş','Lohn ausgezahlt'], mVorschuss:['Avans','Vorschuss'], mRest:['Kalan','Rest'], mSchuld:['Borç','Schuld'], mGuthaben:['Alacak','Guthaben'], ergaenzen:['Düzenle','Ergänzen'], aufmass:['Ölçü','Aufmaß'],
   amTippen:['Daireyi noktaya getir, ＋ bas','Kreis auf den Punkt richten und ＋ drücken'], amSuchen:['Telefonu yavaşça sağa sola hareket ettirin…','Handy langsam hin und her bewegen – Kamera nicht abdecken'], amPunkt:['Nokta','Punkt setzen'],
   amUebernehmen:['Kaydet','Übernehmen'], amNeu:['Yeni çizgi','Neue Linie'], amZurueck:['Geri','Zurück'], amGesamt:['Toplam','Gesamt'], foto:['Fotoğraf','Foto'], beleg:['Fiş / Fatura','Beleg'], stopp:['Bitir','Fertig'],
   kiLaeuft:['Yapay zeka çalışıyor…','KI arbeitet…'], belegOk:['Fiş kaydedildi','Beleg gespeichert'], mikroNein:['Mikrofon izni yok','Kein Zugriff aufs Mikrofon'],
@@ -664,6 +671,7 @@ function zeigeKalender(){
   if(d.gesperrt) h+='<div class="hinweis">🔒 '+Lt('gesperrt')+'</div>';
   if(mo!==monatVon(heute)) h+='<button class="mittel b-hell" onclick="S.kalMonat=monatVon(heuteIso());zeigeKalender()">'+L('zuHeute')+'</button><div style="height:8px"></div>';
   if(!d.gesperrt||S.nutzer.rolle==='admin') h+='<button class="mittel b-hell" onclick="abwesenheitForm()">🏖 '+L('abwesend')+'</button>';
+  h+='<div style="height:8px"></div><button class="mittel b-hell" onclick="monatsliste()">📄 '+L('mListe')+'</button>';
   h+='<div class="legende"><span class="pill p-gruen">■ '+Lt('tagZu')+'</span><span class="pill" style="background:#fff;border:2px solid #9fd3ad;color:var(--gruen)">'+(tr()?'Açık / ':'')+'Offen</span><span class="pill p-blau">'+Lt('urlaub')+'</span><span class="pill p-rot">'+Lt('krank')+'</span><span class="pill p-grau">'+Lt('feiertag')+'</span></div>';
   if(fl) h+='<div class="karte jliste" id="jliste" style="margin-top:12px"><div class="leer">…</div></div>';
   $('inhalt').innerHTML=h;
@@ -1119,13 +1127,68 @@ function maForm(id){
     '<label class="f">Rolle</label><select class="eing" id="mRolle"><option value="mitarbeiter" '+(m.rolle!=='admin'?'selected':'')+'>Mitarbeiter (sieht nur sich selbst)</option><option value="admin" '+(m.rolle==='admin'?'selected':'')+'>Admin (sieht alles)</option></select>'+
     '<label class="f">'+(id?'Neue PIN (leer lassen = unverändert)':'PIN (4–8 Ziffern)')+'</label><input class="eing" id="mPin" inputmode="numeric" maxlength="8" autocomplete="off">'+
     '<label class="f">Urlaubstage pro Jahr</label><input class="eing" id="mUrlaub" inputmode="numeric" value="'+(m.urlaubJahr||'')+'" placeholder="z. B. 24">'+
+    '<label class="f">Stundenlohn intern (€ brutto)</label><input class="eing" id="mLohn" inputmode="decimal" value="'+(m.stundenlohn||'')+'" placeholder="z. B. 18">'+
+    '<div class="reihe"><div><label class="f">Restschuld/Guthaben ab Monat</label><input type="month" class="eing" id="mSMon" value="'+(m.saldoMonat||'')+'"></div><div><label class="f">Betrag € (− = Schuld)</label><input class="eing" id="mSal" inputmode="decimal" value="'+(m.saldoStart===''||m.saldoStart==null?'':String(m.saldoStart).replace('.',','))+'" placeholder="z. B. -1948,71"></div></div>'+
     '<label class="f">Davon '+new Date().getFullYear()+' schon genommen (vor der App)</label><input class="eing" id="mUrlaubVorher" inputmode="numeric" value="'+(m.urlaubStartJahr==String(new Date().getFullYear())?m.urlaubStartGenommen:'')+'" placeholder="z. B. 18">'+
     (id?'<label class="f" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="mAktiv" '+(m.aktiv?'checked':'')+' style="width:22px;height:22px"> Zugang aktiv</label>':'')+
     '<div id="fFehler"></div><div style="height:14px"></div><button class="gross b-navy" onclick="maSpeichern('+(id?'\''+id+'\'':'null')+')">Speichern</button>');
 }
+/* ======================= Monatsliste (intern): Stunden, Lohn, Vorschuss, Rest ======================= */
+function eur2(x){ return (x<0?'−':'')+Math.abs(+x).toFixed(2).replace('.',',')+' €'; }
+function monatsliste(){
+  var ma = S.nutzer.rolle==='admin' ? (S.ma||S.nutzer.id) : S.nutzer.id, mo=S.kalMonat||monatVon(heuteIso());
+  oeffneBlatt('<div class="lade" style="min-height:160px">…</div>');
+  rufe('lohnliste',{ma:ma, monat:mo}).then(mlZeigen).catch(function(f){ oeffneBlatt('<p>'+fehlerText(f)+'</p>'); });
+}
+function mlZeigen(r){
+  var adm=S.nutzer.rolle==='admin', h='<h2>📄 '+L('mListe')+' · '+esc(r.name)+'</h2><div class="klein" style="margin:-6px 0 8px">'+r.monat.slice(5)+'/'+r.monat.slice(0,4)+'</div>';
+  h+='<div class="mlTab">'+r.tage.map(function(t){
+    var g=t.geld.map(function(x){ return '<div class="mlGeld">💶 '+(x.art==='vorschuss'?Lt('mVorschuss'):x.art==='lohn'?Lt('mGezahlt'):'Sonstiges')+' '+eur2(x.betrag)+(x.notiz?' · '+esc(x.notiz):'')+(adm?' <button class="link" onclick="zahlungWeg(\''+x.id+'\',\''+r.ma+'\',\''+r.monat+'\')">✕</button>':'')+'</div>'; }).join('');
+    if(!t.zeilen.length && !g) return '<div class="mlZ leer2"><span class="mlD">'+t.wt+' '+t.tag+'</span></div>';
+    return t.zeilen.map(function(z,i){ return '<div class="mlZ"><span class="mlD">'+(i?'':t.wt+' '+t.tag)+'</span><span class="mlT">'+esc(z.text)+(z.start?'<small>'+z.start+'–'+(z.ende||'…')+(z.pause?' · '+z.pause+' min':'')+'</small>':'')+'</span><b>'+String(z.std).replace('.',',')+'</b></div>'; }).join('')+
+      (t.zeilen.length?'':'<div class="mlZ"><span class="mlD">'+t.wt+' '+t.tag+'</span><span class="mlT"></span><b></b></div>')+g;
+  }).join('')+'</div>';
+  var neg=r.rest!=null&&r.rest<0;
+  h+='<div class="karte" style="margin-top:10px">'+
+    '<div class="zeileL"><span>'+L('mStd')+'</span><b>'+String(r.summe.bezahlt).replace('.',',')+' h</b></div>'+
+    '<div class="klein" style="margin:-4px 0 6px">Arbeit '+String(r.summe.arbeit).replace('.',',')+' h · Krank '+r.summe.krank+' · Urlaub '+r.summe.urlaub+' · Feiertag '+r.summe.feiertag+' (je 8 h)</div>'+
+    (r.satz?'<div class="zeileL"><span>'+L('mLohn')+' ('+String(r.satz).replace('.',',')+' €/h)</span><b>'+eur2(r.lohn)+'</b></div>':'')+
+    (r.vortrag!=null?'<div class="zeileL"><span>'+L('mVortrag')+'</span><b>'+eur2(r.vortrag)+'</b></div>':'')+
+    (r.gezahltLohn?'<div class="zeileL"><span>− '+L('mGezahlt')+'</span><b>'+eur2(r.gezahltLohn)+'</b></div>':'')+
+    (r.vorschuss?'<div class="zeileL"><span>− '+L('mVorschuss')+'</span><b>'+eur2(r.vorschuss)+'</b></div>':'')+
+    (r.sonstiges?'<div class="zeileL"><span>− Sonstiges</span><b>'+eur2(r.sonstiges)+'</b></div>':'')+
+    (r.rest!=null?'<div class="zeileL" style="font-size:1.15rem"><span>'+L('mRest')+'</span><b style="color:'+(neg?'var(--rot)':'var(--gruen)')+'">'+eur2(r.rest)+'</b></div><div class="klein" style="text-align:right">'+(neg?Lt('mSchuld'):Lt('mGuthaben'))+'</div>':'')+
+    '<div class="klein" style="margin-top:6px">🏖 '+Lt('urlaub')+' '+r.urlaub.jahr+': '+r.urlaub.anspruch+' · '+(tr()?'alındı':'genommen')+' '+r.urlaub.genommen+' · Rest '+r.urlaub.rest+'</div></div>';
+  if(adm){
+    h+='<div class="karte"><p class="titel">💶 Vorschuss / Lohn eintragen</p><div class="reihe"><div><label class="f">Datum</label><input type="date" class="eing" id="zDat" value="'+(r.monat===monatVon(heuteIso())?heuteIso():r.monat+'-28')+'"></div><div><label class="f">Betrag €</label><input class="eing" id="zBet" inputmode="decimal"></div></div>'+
+      '<label class="f">Art</label><select class="eing" id="zArt"><option value="vorschuss">Vorschuss</option><option value="lohn">Lohn ausgezahlt</option><option value="sonstiges">Sonstiges</option></select>'+
+      '<label class="f">Notiz</label><input class="eing" id="zNot" placeholder="optional"><div style="height:8px"></div>'+
+      '<button class="mittel b-navy" style="color:#fff" onclick="zahlungNeu(\''+r.ma+'\')">Speichern</button></div>'+
+      '<button class="mittel b-gruen" style="color:#fff" id="mlDat" onclick="mlDateien(\''+r.ma+'\',\''+r.monat+'\')">📁 Monatsliste + Steuerberater‑Tabelle in Drive speichern</button>'+
+      '<p class="klein">Ordner: Privat › Installation_Technik › eleman › '+r.monat.slice(2,4)+'</p>'+
+      (!r.satz||r.vortrag==null?'<p class="klein">Tipp: Stundenlohn und Start‑Restschuld unter Verwaltung → Team → Bearbeiten eintragen.</p>':'');
+  }
+  oeffneBlatt(h);
+}
+function zahlungNeu(ma){
+  var z={ma:ma, datum:$('zDat').value, art:$('zArt').value, betrag:$('zBet').value, notiz:$('zNot').value};
+  if(!z.betrag) return toast('Betrag fehlt');
+  rufe('zahlungSpeichern',{zahlung:z}).then(function(r){ mlZeigen(r); toast('✓ gespeichert'); }).catch(function(f){ toast(fehlerText(f)); });
+}
+function zahlungWeg(id,ma,mo){ frage('Zahlung löschen?','🗑 Löschen',function(){ rufe('zahlungLoeschen',{id:id, ma:ma, monat:mo}).then(mlZeigen).catch(function(f){ toast(fehlerText(f)); }); }); }
+function mlDateien(ma,mo){
+  var b=$('mlDat'); b.disabled=true; b.innerHTML='⏳ wird erstellt…';
+  rufe('lohnlisteDateien',{ma:ma, monat:mo}).then(function(r){
+    oeffneBlatt('<h2>✓ Gespeichert</h2><p>Beide Excel‑Dateien liegen in deinem Ordner <b>eleman › '+mo.slice(2,4)+'</b>.</p>'+
+      '<a class="mittel b-navy" style="color:#fff;text-decoration:none" href="'+r.intern+'" target="_blank">Monatsliste öffnen</a><div style="height:8px"></div>'+
+      '<a class="mittel b-hell" style="text-decoration:none" href="'+r.steuer+'" target="_blank">Steuerberater‑Tabelle öffnen</a><div style="height:8px"></div>'+
+      '<a class="mittel b-hell" style="text-decoration:none" href="'+r.ordner+'" target="_blank">Ordner öffnen</a>');
+  }).catch(function(f){ b.disabled=false; b.innerHTML='📁 Erneut versuchen'; toast(fehlerText(f)); });
+}
 function maSpeichern(id){
   var d={id:id, name:$('mName').value, sprache:$('mSpr').value, rolle:$('mRolle').value, pin:$('mPin').value.trim(), aktiv: id?$('mAktiv').checked:true,
-         urlaubJahr:$('mUrlaub').value.trim(), urlaubStartGenommen:$('mUrlaubVorher').value.trim()};
+         urlaubJahr:$('mUrlaub').value.trim(), urlaubStartGenommen:$('mUrlaubVorher').value.trim(),
+         stundenlohn:$('mLohn').value.trim(), saldoMonat:$('mSMon').value, saldoStart:$('mSal').value.trim().replace('−','-')};
   rufe('mitarbeiterSpeichern',{mitarbeiter:d}).then(function(r){ schliesseBlatt(); nachAdmin(r); toast('✓ gespeichert'); }).catch(function(f){ fFehler(fehlerText(f)); });
 }
 
