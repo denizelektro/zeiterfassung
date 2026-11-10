@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Kalender</title>
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#fffdf3;--tx:#222;--mut:#999;--lin:#eee6c8;--heute:#1a73e8;--hover:#f3edd2}
+@media (prefers-color-scheme:dark){:root{--bg:#262626;--tx:#eee;--mut:#777;--lin:#3a3a3a;--heute:#8ab4f8;--hover:#333}}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font:13px/1.2 "Segoe UI",system-ui,sans-serif;user-select:none}
+#app{display:flex;flex-direction:column;height:100%;padding:6px}
+.kopf{display:flex;align-items:center;gap:4px;margin-bottom:4px}
+.kopf b{flex:1;text-align:center;font-size:14px;cursor:pointer}
+.kopf button{border:0;background:none;color:var(--tx);font-size:16px;width:24px;height:22px;border-radius:4px;cursor:pointer}
+.kopf button:hover,.tag:hover{background:var(--hover)}
+.raster{flex:1;display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:1px;min-height:0}
+.wt{font-size:10px;color:var(--mut);text-align:center;align-self:end;padding-bottom:2px}
+.tag{display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:5px;cursor:pointer;position:relative}
+.tag.fremd{color:var(--mut)}
+.tag.we .n{color:#c55}
+.tag.fremd.we .n{color:var(--mut)}
+.tag.heute .n{background:var(--heute);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center}
+.tag.sel{outline:1.5px solid var(--heute)}
+.pk{display:flex;gap:2px;height:6px;margin-top:2px}
+.pk i{width:5px;height:5px;border-radius:50%;display:block}
+.pk i.rot{background:#e53935!important;width:6px;height:6px}
+.liste{max-height:38%;overflow:auto;border-top:1px solid var(--lin);margin-top:4px;padding-top:4px;font-size:12px}
+.liste:empty{display:none}
+.liste div{padding:2px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;border-radius:4px}
+.liste div:hover{background:var(--hover)}
+.liste .z{color:var(--mut);margin-right:4px}
+.liste .w{color:#e53935;font-weight:600}
+.leer{color:var(--mut)}
+.pin{display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:center;height:100%;text-align:center}
+.pin input{font-size:20px;width:120px;text-align:center;padding:4px;border:1px solid var(--lin);border-radius:6px;background:transparent;color:var(--tx)}
+.pin button{padding:5px 14px;border:0;border-radius:6px;background:var(--heute);color:#fff;cursor:pointer}
+.status{position:fixed;right:6px;bottom:3px;font-size:9px;color:var(--mut)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="status" id="st"></div>
+<script>
+var API_URL='https://script.google.com/macros/s/AKfycbyXXwYNLvve-wmppaLomzcKkC1o7K3WqogbYJqjG6z_lXhdvB64XQmXMv6OEcsPI6gY/exec';
+var LS=(function(){try{localStorage.setItem('_t','1');localStorage.removeItem('_t');return localStorage}catch(e){var m={};return{getItem:function(k){return m[k]||null},setItem:function(k,v){m[k]=String(v)},removeItem:function(k){delete m[k]}}}})();
+var MON=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+var S={monat:null,daten:{},sel:null};
+function $(i){return document.getElementById(i)}
+function z2(n){return(n<10?'0':'')+n}
+function iso(d){return d.getFullYear()+'-'+z2(d.getMonth()+1)+'-'+z2(d.getDate())}
+function heute(){return iso(new Date())}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function api(aktion,daten){
+  return fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({token:LS.getItem('ze_token'),aktion:aktion,daten:daten||{}})})
+    .then(function(r){return r.json()}).then(function(a){if(!a.ok)throw new Error(a.fehler);return a.daten});
+}
+function laden(mo,frisch){
+  $('st').textContent='…';
+  return api('kalender',{monat:mo,frisch:!!frisch}).then(function(r){
+    S.daten[mo]=r.termine; try{LS.setItem('ze_kal_'+mo,JSON.stringify(r.termine))}catch(e){}
+    $('st').textContent=''; if(S.monat===mo)zeichnen();
+  }).catch(function(f){
+    var m=String(f&&f.message||f);
+    if(m==='ANMELDUNG'||m==='Keine Berechtigung'){LS.removeItem('ze_token');pinZeigen(m==='Keine Berechtigung'?'Nur für den Chef-Zugang':'');return}
+    $('st').textContent=/Kalender|Calendar|Berechtigung|authoriz|Autoris/i.test(m)?'Kalender noch nicht freigegeben':'offline';
+  });
+}
+function termineAm(d){
+  return (S.daten[S.monat]||[]).filter(function(t){return t.von<=d&&t.bis>=d});
+}
+function zeichnen(){
+  var j=+S.monat.slice(0,4),m=+S.monat.slice(5,7)-1;
+  var erster=new Date(j,m,1),off=(erster.getDay()+6)%7,start=new Date(j,m,1-off);
+  var h='<div class="kopf"><button onclick="blaettern(-1)" title="Vormonat">‹</button><b ondblclick="gross()" onclick="zuHeute()" title="Klick: heute · Doppelklick: großer Kalender">'+MON[m]+' '+j+'</b><button onclick="blaettern(1)" title="Nächster Monat">›</button></div><div class="raster">';
+  ['Mo','Di','Mi','Do','Fr','Sa','So'].forEach(function(w){h+='<div class="wt">'+w+'</div>'});
+  var wochen=Math.ceil((off+new Date(j,m+1,0).getDate())/7);
+  for(var i=0;i<wochen*7;i++){
+    var d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i),di=iso(d),tt=termineAm(di);
+    var cl='tag'+(d.getMonth()!==m?' fremd':'')+(d.getDay()===0||d.getDay()===6?' we':'')+(di===heute()?' heute':'')+(di===S.sel?' sel':'');
+    var pk=tt.slice(0,3).map(function(t){return '<i class="'+(t.wichtig?'rot':'')+'" style="background:'+esc(t.farbe||'#1a73e8')+'"></i>'}).join('');
+    var tip=tt.map(function(t){return (t.zeit?t.zeit+' ':'')+t.titel}).join('\n');
+    h+='<div class="'+cl+'" title="'+esc(tip)+'" onclick="waehle(\''+di+'\')" ondblclick="gross(\''+di+'\')"><span class="n">'+d.getDate()+'</span><span class="pk">'+pk+'</span></div>';
+  }
+  h+='</div><div class="liste" id="liste"></div>';
+  $('app').innerHTML=h; liste();
+}
+function liste(){
+  var el=$('liste'); if(!el)return;
+  var d=S.sel||heute(); var tt=termineAm(d);
+  if(S.sel===null&&!tt.length){el.innerHTML='';return}
+  var kopf=d===heute()?'Heute':(+d.slice(8))+'.'+(+d.slice(5,7))+'.';
+  el.innerHTML='<div class="leer">'+kopf+(tt.length?'':' – keine Termine')+'</div>'+tt.map(function(t){
+    return '<div ondblclick="gross(\''+d+'\')" title="'+esc(t.titel+(t.ort?' – '+t.ort:''))+'"><span class="z">'+(t.zeit||'ganzt.')+'</span><span class="'+(t.wichtig?'w':'')+'">'+esc(t.titel)+'</span></div>';
+  }).join('');
+}
+function waehle(d){S.sel=(S.sel===d?null:d);zeichnen()}
+function zuHeute(){S.sel=null;setze(heute().slice(0,7))}
+function blaettern(n){var j=+S.monat.slice(0,4),m=+S.monat.slice(5,7)-1+n;var d=new Date(j,m,1);S.sel=null;setze(d.getFullYear()+'-'+z2(d.getMonth()+1))}
+function setze(mo){
+  S.monat=mo;
+  if(!S.daten[mo]){try{var c=LS.getItem('ze_kal_'+mo);if(c)S.daten[mo]=JSON.parse(c)}catch(e){}}
+  zeichnen(); laden(mo);
+}
+function gross(d){
+  var url='https://calendar.google.com/calendar/r/'+(d?'day/'+d.replace(/-/g,'/'):'month');
+  window.open(url,'_blank');
+}
+function pinZeigen(hinweis){
+  $('app').innerHTML='<div class="pin"><b>Kalender</b><div class="leer">'+(hinweis||'Einmal mit deiner Zeiterfassungs-PIN anmelden')+'</div><input id="pin" type="password" inputmode="numeric" autofocus><button onclick="anmelden()">Anmelden</button></div>';
+  $('pin').addEventListener('keydown',function(e){if(e.key==='Enter')anmelden()});
+  setTimeout(function(){$('pin').focus()},50);
+}
+function anmelden(){
+  var pin=$('pin').value; if(!pin)return;
+  $('st').textContent='…';
+  api('login',{pin:pin}).then(function(r){
+    LS.setItem('ze_token',r.token); $('st').textContent=''; setze(heute().slice(0,7));
+  }).catch(function(f){$('st').textContent=String(f.message||f)});
+}
+if(!LS.getItem('ze_token'))pinZeigen(); else setze(heute().slice(0,7));
+setInterval(function(){if(S.monat&&LS.getItem('ze_token'))laden(S.monat,true)},5*60*1000);
+window.addEventListener('focus',function(){if(S.monat&&LS.getItem('ze_token'))laden(S.monat)});
+var tagJetzt=heute();setInterval(function(){if(heute()!==tagJetzt){tagJetzt=heute();if(S.monat)zeichnen()}},60000);
+</script>
+</body>
+</html>

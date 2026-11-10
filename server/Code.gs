@@ -92,8 +92,47 @@ var AKTIONEN = {
   baustelleLoeschen: { admin: true, fn: function (ich, d) { return baustelleLoeschen_(d); } },
   mitarbeiterSpeichern: { admin: true, fn: function (ich, d) { return mitarbeiterSpeichern_(d); } },
   monatsbericht:  { admin: true, fn: function (ich, d) { return monatsbericht_(d); } },
-  monatEntsperren:{ admin: true, fn: function (ich, d) { return monatEntsperren_(d); } }
+  monatEntsperren:{ admin: true, fn: function (ich, d) { return monatEntsperren_(d); } },
+  kalender:       { admin: true, fn: function (ich, d) { return kalender_(d); } }
 };
+
+/* ============================ Google Kalender (Mini-Fenster) ============================ */
+
+function kalender_(d) {
+  var mo = String(d.monat || Utilities.formatDate(new Date(), APP_TZ_(), 'yyyy-MM'));
+  if (!/^\d{4}-\d{2}$/.test(mo)) throw new Error('Monat ungültig');
+  var cache = CacheService.getScriptCache(), key = 'KAL_' + mo;
+  if (!d.frisch) { var c = cache.get(key); if (c) return JSON.parse(c); }
+  var j = +mo.slice(0, 4), m = +mo.slice(5, 7) - 1;
+  var von = new Date(j, m, 1), bis = new Date(j, m + 1, 1);
+  von.setDate(von.getDate() - 7); bis.setDate(bis.getDate() + 14);
+  var tz = APP_TZ_(), aus = [];
+  CalendarApp.getAllOwnedCalendars().forEach(function (kal) {
+    if (kal.isHidden && kal.isHidden()) return;
+    var kfarbe = kal.getColor();
+    kal.getEvents(von, bis).forEach(function (e) {
+      var ganz = e.isAllDayEvent(), s = e.getStartTime(), en = e.getEndTime();
+      if (ganz) en = new Date(en.getTime() - 1000);
+      var titel = e.getTitle() || '(ohne Titel)', f = String(e.getColor() || '');
+      aus.push({
+        von: Utilities.formatDate(s, tz, 'yyyy-MM-dd'),
+        bis: Utilities.formatDate(en, tz, 'yyyy-MM-dd'),
+        zeit: ganz ? '' : Utilities.formatDate(s, tz, 'HH:mm'),
+        titel: titel, ort: e.getLocation() || '',
+        wichtig: f === '11' || f === '4' || /^\s*!/.test(titel),
+        farbe: kfarbe
+      });
+    });
+  });
+  aus.sort(function (a, b) { return (a.von + a.zeit) < (b.von + b.zeit) ? -1 : 1; });
+  var r = { monat: mo, termine: aus };
+  try { cache.put(key, JSON.stringify(r), 120); } catch (x) {}
+  return r;
+}
+function APP_TZ_() { return APP.zeitzone; }
+
+/** Einmal im Editor ausführen, damit Google den Kalender-Zugriff erlaubt. */
+function kalenderFreigeben() { Logger.log(CalendarApp.getDefaultCalendar().getName()); }
 
 /* ============================ Anmeldung ============================ */
 
