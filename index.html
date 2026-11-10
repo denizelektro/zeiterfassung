@@ -95,7 +95,7 @@
   .tag.arbeit .h{color:var(--gruen)}
   .tag.zu{background:var(--gruen);color:#fff;border-color:var(--gruen)} .tag.zu .h{color:#fff}
   .tag.urlaub{background:var(--blauhell);color:var(--blau)} .tag.krank{background:var(--rothell);color:var(--rot)}
-  .tag.dim{opacity:.22}
+  .tag.dim{opacity:.5}
   .filter{display:flex;gap:6px;margin:0 0 10px}
   .filter button{flex:1;padding:9px 4px;border-radius:12px;background:#fff;font-weight:700;font-size:.85rem;color:var(--grau);border:2px solid transparent}
   .filter button.an.f-alle{border-color:var(--navy);color:var(--navy)} .filter button.an.f-U{background:var(--blauhell);color:var(--blau);border-color:var(--blau)} .filter button.an.f-K{background:var(--rothell);color:var(--rot);border-color:var(--rot)}
@@ -219,7 +219,9 @@ var TX = {
   nachher:['Malzeme ve km ekle','Material & km ergänzen'], nichtJetzt:['Şimdi değil','Nicht jetzt'],
   sicherLoeschen:['Bu kayıt silinsin mi?','Eintrag wirklich löschen?'], tagLaeuft:['Çalışma devam ediyor','Arbeit läuft noch'],
   pauseBisher:['Mola','Pause'], navi:['Yol tarifi','Navigation'], offenTage:['Kapatılmamış gün','Offene Tage'],
-  sprechen:['Konuş','Sprechen'], ergaenzen:['Düzenle','Ergänzen'], foto:['Fotoğraf','Foto'], beleg:['Fiş / Fatura','Beleg'], stopp:['Bitir','Fertig'],
+  sprechen:['Konuş','Sprechen'], ergaenzen:['Düzenle','Ergänzen'], aufmass:['Ölçü','Aufmaß'],
+  amTippen:['Noktayı hedefle, ekrana dokun','Punkt anpeilen, aufs Display tippen'], amSuchen:['Telefonu yavaşça hareket ettirin…','Handy langsam bewegen, Boden/Wand wird gesucht…'],
+  amUebernehmen:['Kaydet','Übernehmen'], amNeu:['Yeni çizgi','Neue Linie'], amZurueck:['Geri','Zurück'], amGesamt:['Toplam','Gesamt'], foto:['Fotoğraf','Foto'], beleg:['Fiş / Fatura','Beleg'], stopp:['Bitir','Fertig'],
   kiLaeuft:['Yapay zeka çalışıyor…','KI arbeitet…'], belegOk:['Fiş kaydedildi','Beleg gespeichert'], mikroNein:['Mikrofon izni yok','Kein Zugriff aufs Mikrofon'],
   kiNichts:['Anlaşılamadı – tekrar deneyin','Nichts erkannt – bitte nochmal'], kiPruefen:['Lütfen kontrol edin','Bitte kurz prüfen']
 };
@@ -573,6 +575,7 @@ function zeigeKalender(){
   var fl=S.kalFilter||'';
   h+='<div class="filter">'+[['','f-alle',tr()?'Hepsi<br><small>Alle</small>':'Alle'],['U','f-U','🏖 '+(tr()?'İzin':'Urlaub')],['K','f-K','🤒 '+(tr()?'Hasta':'Krank')]].map(function(f){
     return '<button class="'+f[1]+(fl===f[0]?' an':'')+'" onclick="S.kalFilter=\''+f[0]+'\';zeigeKalender()">'+f[2]+'</button>'; }).join('')+'</div>';
+  if(fl) h+='<div class="klein" style="margin:-4px 2px 8px">'+(tr()?'Filtre açık – normal görünüm için „Alle“. ':'')+'Filter aktiv – für die normale Ansicht „Alle“ antippen. Jeden Tag kannst du trotzdem antippen und bearbeiten.</div>';
   h+='<div class="kal-kopf"><button class="pfeil" onclick="kalBlaettern(-1)">‹</button><div class="mon">'+monatText(mo)+'</div><button class="pfeil" onclick="kalBlaettern(1)">›</button></div>';
   if(!d){ $('inhalt').innerHTML=h+'<div class="lade" style="min-height:200px">…</div>'; ladeMonat(ma,mo).then(function(){ if(S.ansicht==='kalender'&&S.kalMonat===mo) zeigeKalender(); }).catch(function(f){ toast(fehlerText(f)); }); return; }
   h+='<div class="kal-wrap" id="kalwrap"><div class="kal" id="kal">';
@@ -675,7 +678,8 @@ function zeichneForm(){
     h+='<label class="f">'+L('material','inl')+'</label><div class="kiReihe">'+
       '<button id="kiB_material" onclick="kiSprache(\'material\')">🎤 '+L('sprechen')+'</button>'+
       '<button id="kiB_foto" onclick="kiBild(\'foto\')">📷 '+L('foto')+'</button>'+
-      '<button id="kiB_beleg" onclick="kiBild(\'beleg\')">🧾 '+L('beleg')+'</button></div>'+
+      '<button id="kiB_beleg" onclick="kiBild(\'beleg\')">🧾 '+L('beleg')+'</button>'+
+      '<button id="kiB_mass" onclick="aufmass()">📏 '+L('aufmass')+'</button></div>'+
       ((e.belege||[]).length?'<div class="belege">'+e.belege.map(function(b,i){ return '<span>'+(adm?'<a href="https://drive.google.com/file/d/'+esc(b.id)+'/view" target="_blank">🧾 '+esc(b.name.replace(/\.jpg$/,''))+'</a>':'🧾 '+Lt('beleg')+' '+(i+1)+' ✓')+(adm?'<button class="x" onclick="formLesen();F.belege.splice('+i+',1);zeichneForm()">✕</button>':'')+'</span>'; }).join('')+'</div>':'')+
       '<div id="fMat">'+e.material.map(function(m,i){
       return '<div class="mat'+(adm?' mp':'')+'"><input class="eing" inputmode="decimal" placeholder="'+(tr()?'Miktar':'Menge')+'" value="'+esc(m.menge)+'" data-i="'+i+'" data-k="menge">'+
@@ -792,6 +796,106 @@ function kiBild(art){
   };
   inp.click();
 }
+/* ======================= Aufmaß mit der Kamera (WebXR, Android) ======================= */
+var AM=null;
+function aufmass(){
+  formLesen();
+  var istIOS=/iPhone|iPad|iPod/.test(navigator.userAgent);
+  var geht = navigator.xr && navigator.xr.isSessionSupported ? navigator.xr.isSessionSupported('immersive-ar') : Promise.resolve(false);
+  geht.then(function(ja){ if(ja) amStart(); else amOhneAR(istIOS); }, function(){ amOhneAR(istIOS); });
+}
+function amOhneAR(ios){
+  var h='<h2>📏 '+Lt('aufmass')+'</h2>'+(ios
+    ? '<p>'+(tr()?'iPhone\'da: <b>Ölçüm</b> (Maßband) uygulamasını açın, ölçün, sonucu buraya yazın.<br><span class="klein">':'')+'Auf dem iPhone: Apple‑App <b>„Maßband“</b> öffnen, messen und das Ergebnis hier eintragen.'+(tr()?'</span>':'')+'</p>'
+    : '<p>Dieses Handy unterstützt das Kamera‑Aufmaß noch nicht. Bitte im Play Store <a class="link" href="https://play.google.com/store/apps/details?id=com.google.ar.core" target="_blank">„Google Play‑Dienste für AR“</a> installieren und die App neu starten. Oder das Maß hier eintragen:</p>')+
+    '<label class="f">Meter</label><input class="eing" id="amMeter" inputmode="decimal" placeholder="z. B. 12,5">'+
+    '<div style="height:10px"></div><button class="gross b-navy" onclick="amUebernehmen(zahl($(\'amMeter\').value))">✓ '+L('amUebernehmen')+'</button>'+
+    '<div style="height:8px"></div><button class="mittel b-hell" onclick="zeichneForm()">'+L('abbrechen')+'</button>';
+  oeffneBlatt(h,true);
+}
+function amUebernehmen(m){
+  m=Math.round(m*10)/10;
+  if(!(m>0)){ zeichneForm(); return; }
+  var leer=F.material.filter(function(x){ return !String(x.text||'').trim() && !String(x.menge||'').trim(); })[0];
+  if(leer){ leer.menge=String(m).replace('.',','); leer.einheit='m'; }
+  else F.material.push({menge:String(m).replace('.',','), einheit:'m', text:''});
+  zeichneForm(); toast('✓ '+String(m).replace('.',',')+' m');
+  setTimeout(function(){ var el=document.querySelectorAll('#fMat [data-k="text"]'); var z=leer?F.material.indexOf(leer):F.material.length-1; if(el[z]){ el[z].focus(); el[z].scrollIntoView({block:'center'}); } },150);
+}
+function amDist(a,b){ var x=a[0]-b[0],y=a[1]-b[1],z=a[2]-b[2]; return Math.sqrt(x*x+y*y+z*z); }
+function amSumme(){ var s=0; AM.linien.forEach(function(l){ for(var i=1;i<l.length;i++) s+=amDist(l[i-1],l[i]); }); return s; }
+function amFmt(m){ return (Math.round(m*100)/100).toFixed(2).replace('.',',')+' m'; }
+function amStart(){
+  var ui=document.createElement('div'); ui.id='amUi';
+  ui.style.cssText='position:fixed;inset:0;z-index:99;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none;font-family:inherit;color:#fff';
+  ui.innerHTML='<div style="padding:calc(14px + env(safe-area-inset-top)) 14px 0;text-align:center;text-shadow:0 1px 4px #000">'+
+    '<div id="amGes" style="font-size:2.2rem;font-weight:800">0,00 m</div><div id="amLive" style="font-size:1rem;opacity:.9"></div><div id="amHin" style="font-size:.95rem;margin-top:4px">'+Lt('amSuchen')+'</div></div>'+
+    '<div style="position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border:3px solid #fff;border-radius:50%;box-shadow:0 0 4px #000"></div>'+
+    '<div style="display:flex;gap:8px;padding:0 12px calc(16px + env(safe-area-inset-bottom));pointer-events:auto">'+
+    '<button data-am="x" style="flex:1;padding:14px 6px;border-radius:14px;background:#fff;color:#c62828;font-weight:800">✕</button>'+
+    '<button data-am="zurueck" style="flex:2;padding:14px 6px;border-radius:14px;background:#fff;font-weight:700">↶ '+Lt('amZurueck').split(' / ').pop()+'</button>'+
+    '<button data-am="neu" style="flex:2;padding:14px 6px;border-radius:14px;background:#fff;font-weight:700">＋ '+Lt('amNeu').split(' / ').pop()+'</button>'+
+    '<button data-am="ok" style="flex:3;padding:14px 6px;border-radius:14px;background:#2e7d32;color:#fff;font-weight:800">✓ '+Lt('amUebernehmen').split(' / ').pop()+'</button></div>';
+  document.body.appendChild(ui);
+  ui.querySelectorAll('button').forEach(function(b){
+    b.addEventListener('beforexrselect',function(e){ e.preventDefault(); });
+    b.addEventListener('click',function(e){ e.stopPropagation(); var a=b.dataset.am;
+      if(a==='x'){ AM.ergebnis=null; AM.session.end(); }
+      else if(a==='ok'){ AM.ergebnis=amSumme(); AM.session.end(); }
+      else if(a==='neu'){ if(AM.linien[AM.linien.length-1].length) AM.linien.push([]); }
+      else if(a==='zurueck'){ var l=AM.linien[AM.linien.length-1]; if(l.length) l.pop(); else if(AM.linien.length>1){ AM.linien.pop(); } }
+      amAnzeige(); });
+  });
+  var canvas=document.createElement('canvas'), gl=canvas.getContext('webgl',{xrCompatible:true, alpha:true});
+  navigator.xr.requestSession('immersive-ar',{requiredFeatures:['hit-test'], optionalFeatures:['dom-overlay','local-floor'], domOverlay:{root:ui}}).then(function(session){
+    AM={session:session, gl:gl, linien:[[]], ziel:null, ergebnis:null, ui:ui};
+    session.updateRenderState({baseLayer:new XRWebGLLayer(session, gl)});
+    amGL(gl);
+    session.addEventListener('select',function(){ if(AM.ziel){ AM.linien[AM.linien.length-1].push(AM.ziel.slice()); amAnzeige(); if(navigator.vibrate) navigator.vibrate(20); } });
+    session.addEventListener('end',function(){ var r=AM.ergebnis; ui.remove(); AM=null; if(r!=null) amUebernehmen(r); else zeichneForm(); });
+    return session.requestReferenceSpace('local').then(function(ref){ AM.ref=ref; return session.requestReferenceSpace('viewer'); })
+      .then(function(viewer){ return session.requestHitTestSource({space:viewer}); })
+      .then(function(src){ AM.hit=src; session.requestAnimationFrame(amFrame); });
+  }).catch(function(e){ ui.remove(); AM=null; amOhneAR(false); toast('AR: '+(e&&e.message||e)); });
+}
+function amAnzeige(){
+  if(!AM) return; var g=$('amGes'), l=$('amLive'), h=$('amHin'); if(!g) return;
+  g.textContent=amFmt(amSumme());
+  var lin=AM.linien[AM.linien.length-1], letzter=lin[lin.length-1];
+  l.textContent = (letzter&&AM.ziel) ? '+ '+amFmt(amDist(letzter,AM.ziel)) : '';
+  h.textContent = AM.ziel ? Lt('amTippen').split(' / ').pop() : Lt('amSuchen').split(' / ').pop();
+}
+function amGL(gl){
+  var vs='attribute vec3 p;uniform mat4 pr;uniform mat4 vw;uniform float sz;void main(){gl_Position=pr*vw*vec4(p,1.0);gl_PointSize=sz;}';
+  var fs='precision mediump float;uniform vec4 c;void main(){gl_FragColor=c;}';
+  function sh(t,src){ var x=gl.createShader(t); gl.shaderSource(x,src); gl.compileShader(x); return x; }
+  var pg=gl.createProgram(); gl.attachShader(pg,sh(gl.VERTEX_SHADER,vs)); gl.attachShader(pg,sh(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(pg);
+  AM.pg=pg; AM.buf=gl.createBuffer(); AM.loc={p:gl.getAttribLocation(pg,'p'),pr:gl.getUniformLocation(pg,'pr'),vw:gl.getUniformLocation(pg,'vw'),sz:gl.getUniformLocation(pg,'sz'),c:gl.getUniformLocation(pg,'c')};
+}
+function amZeichne(gl,pts,mode,farbe,groesse){
+  if(!pts.length) return; var f=[]; pts.forEach(function(q){ f.push(q[0],q[1],q[2]); });
+  gl.bindBuffer(gl.ARRAY_BUFFER,AM.buf); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(f),gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(AM.loc.p); gl.vertexAttribPointer(AM.loc.p,3,gl.FLOAT,false,0,0);
+  gl.uniform4fv(AM.loc.c,farbe); gl.uniform1f(AM.loc.sz,groesse||1); gl.drawArrays(mode,0,pts.length);
+}
+function amFrame(t,frame){
+  if(!AM) return; var s=frame.session; s.requestAnimationFrame(amFrame);
+  var gl=AM.gl, layer=s.renderState.baseLayer, pose=frame.getViewerPose(AM.ref);
+  var hits=AM.hit?frame.getHitTestResults(AM.hit):[];
+  var vorher=!!AM.ziel;
+  if(hits.length){ var hp=hits[0].getPose(AM.ref); if(hp){ var q=hp.transform.position; AM.ziel=[q.x,q.y,q.z]; } } else AM.ziel=null;
+  if(vorher!==!!AM.ziel || AM.ziel) amAnzeige();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,layer.framebuffer); gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  if(!pose) return; gl.useProgram(AM.pg); gl.disable(gl.DEPTH_TEST);
+  pose.views.forEach(function(v){
+    var vp=layer.getViewport(v); gl.viewport(vp.x,vp.y,vp.width,vp.height);
+    gl.uniformMatrix4fv(AM.loc.pr,false,v.projectionMatrix); gl.uniformMatrix4fv(AM.loc.vw,false,v.transform.inverse.matrix);
+    AM.linien.forEach(function(l){ amZeichne(gl,l,gl.LINE_STRIP,[1,0.8,0,1]); amZeichne(gl,l,gl.POINTS,[1,1,1,1],18); });
+    var lin=AM.linien[AM.linien.length-1];
+    if(AM.ziel){ if(lin.length) amZeichne(gl,[lin[lin.length-1],AM.ziel],gl.LINES,[1,1,1,0.8]); amZeichne(gl,[AM.ziel],gl.POINTS,[0.2,0.9,0.3,1],22); }
+  });
+}
+
 function inBase64(blob){ return new Promise(function(ok,nein){ var r=new FileReader(); r.onload=function(){ ok(String(r.result).split(',')[1]); }; r.onerror=nein; r.readAsDataURL(blob); }); }
 function bildKlein(datei, max){
   return new Promise(function(ok,nein){
