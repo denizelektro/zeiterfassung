@@ -99,7 +99,7 @@ var AKTIONEN = {
   kiFoto:         { ohneLock: true, fn: function (ich, d) { return kiFoto_(ich, d); } },
   belegHochladen: { ohneLock: true, fn: function (ich, d) { return belegHochladen_(ich, d); } },
   kiSchluessel:   { admin: true, fn: function (ich, d) { return kiSchluessel_(d); } },
-  kiDiagnose:     { admin: true, ohneLock: true, fn: function (ich, d) { return kiDiagnose_(); } }
+  kiDiagnose:     { admin: true, ohneLock: true, fn: function (ich, d) { return kiDiagnose_(d); } }
 };
 
 /* ============================ KI (Google Gemini) ============================ */
@@ -119,9 +119,9 @@ function kiSchluessel_(d) {
     if (alt) props.setProperty('KI_KEY', alt); else props.deleteProperty('KI_KEY'); throw new Error('Schlüssel funktioniert nicht: ' + x.message); }
   return { kiAktiv: true };
 }
-function kiDiagnose_() {
+function kiDiagnose_(d) {
   var key = PropertiesService.getScriptProperties().getProperty('KI_KEY'), aus = [];
-  KI_MODELLE.forEach(function (mo) {
+  (d && d.modell ? [String(d.modell)] : KI_MODELLE).forEach(function (mo) {
     var t0 = Date.now();
     var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + mo + ':generateContent', {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
@@ -144,6 +144,7 @@ function kiFrage_(teile) {
   if (!key) throw new Error('KI_FEHLT');
   var letzter = '';
   for (var i = 0; i < KI_MODELLE.length; i++) {
+    var t0 = Date.now();
     var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + KI_MODELLE[i] + ':generateContent', {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true,
       headers: { 'x-goog-api-key': key },
@@ -151,6 +152,7 @@ function kiFrage_(teile) {
         generationConfig: kiConfig_(KI_MODELLE[i]) })
     });
     var code = r.getResponseCode(), txt = r.getContentText();
+    console.log('KI ' + KI_MODELLE[i] + ' → ' + code + ' in ' + (Date.now() - t0) + ' ms');
     if (code === 200) {
       var j = JSON.parse(txt), c = j.candidates && j.candidates[0];
       var t = c && c.content && c.content.parts ? c.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
