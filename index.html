@@ -887,9 +887,8 @@ function amStart(){
   ui.style.cssText='position:fixed;inset:0;z-index:99;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none;font-family:inherit;color:#fff';
   ui.innerHTML='<div style="padding:calc(14px + env(safe-area-inset-top)) 14px 0;text-align:center;text-shadow:0 1px 4px #000">'+
     '<div id="amGes" style="font-size:2.2rem;font-weight:800">0,00 m</div><div id="amLive" style="font-size:1rem;opacity:.9"></div><div id="amHin" style="font-size:.95rem;margin-top:4px">'+Lt('amSuchen')+'</div></div>'+
-    '<div id="amRing" style="position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;border:3px solid #fff;border-radius:50%;box-shadow:0 0 4px #000"></div>'+
-    '<div style="pointer-events:auto;text-align:center;padding-bottom:14px"><button data-am="punkt" id="amPunktB" style="width:96px;height:96px;border-radius:50%;background:#fff;border:6px solid #2e7d32;font-size:2.1rem;font-weight:800;box-shadow:0 2px 10px rgba(0,0,0,.4)">＋</button>'+
-    '<div style="color:#fff;text-shadow:0 1px 4px #000;font-weight:700;margin-top:4px">'+Lt('amPunkt').split(' / ').pop()+'</div></div>'+
+    '<div id="amRing" style="position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border:2px solid rgba(255,255,255,.85);border-radius:50%;box-shadow:0 0 3px rgba(0,0,0,.6)"><div style="position:absolute;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;border-radius:50%;background:#fff"></div></div>'+
+    '<div style="pointer-events:auto;text-align:center;padding-bottom:10px"><button data-am="punkt" id="amPunktB" style="padding:12px 30px;border-radius:99px;background:rgba(46,125,50,.75);color:#fff;border:2px solid rgba(255,255,255,.8);font-size:1.05rem;font-weight:800">＋ '+Lt('amPunkt').split(' / ').pop()+'</button></div>'+
     '<div style="display:flex;gap:8px;padding:0 12px calc(16px + env(safe-area-inset-bottom));pointer-events:auto">'+
     '<button data-am="x" style="flex:1;padding:14px 6px;border-radius:14px;background:#fff;color:#c62828;font-weight:800">✕</button>'+
     '<button data-am="zurueck" style="flex:2;padding:14px 6px;border-radius:14px;background:#fff;font-weight:700">↶ '+Lt('amZurueck').split(' / ').pop()+'</button>'+
@@ -938,7 +937,7 @@ function amAnzeige(){
   var lin=AM.linien[AM.linien.length-1], letzter=lin[lin.length-1];
   l.textContent = (letzter&&AM.ziel) ? '+ '+amFmt(amDist(letzter,AM.ziel)) : '';
   h.textContent = AM.ziel ? Lt('amTippen').split(' / ').pop() : Lt('amSuchen').split(' / ').pop();
-  var pb=$('amPunktB'); if(pb) pb.style.opacity = AM.ziel ? '1' : '.45';
+  var pb=$('amPunktB'); if(pb) pb.style.opacity = AM.ziel ? '1' : '.5';
   var rg=$('amRing'); if(rg) rg.style.borderColor = AM.ziel ? '#4caf50' : '#fff';
 }
 function amGL(gl){
