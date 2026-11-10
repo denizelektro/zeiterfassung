@@ -49,6 +49,7 @@ function doPost(e) {
 function api(token, aktion, daten) {
   try {
     daten = daten || {};
+    _C = {}; _B = {};
     kopfPruefen_(T.MA);
     if (aktion === 'login') return ok(login_(daten.pin));
     var ich = nutzerAusToken_(token);
@@ -287,7 +288,7 @@ function abwesenheit_(ich, d) {
 /** Neue Arbeit an einem abgeschlossenen Tag → Tag wieder offen, damit er neu geprüft wird. */
 function tagWiederOeffnen_(ma, datum) {
   var sh = blatt_(T.TAG), werte = sh.getDataRange().getValues();
-  for (var i = werte.length - 1; i >= 1; i--) if (String(werte[i][0]) === ma && String(werte[i][1]) === datum) sh.deleteRow(i + 1);
+  for (var i = werte.length - 1; i >= 1; i--) if (String(werte[i][0]) === ma && wert_(werte[i][1], 'datum') === datum) sh.deleteRow(i + 1);
 }
 
 function tagAbschluss_(ich, d, schliessen) {
@@ -295,11 +296,11 @@ function tagAbschluss_(ich, d, schliessen) {
   pruefeDatum_(d.datum);
   pruefeSperre_(ich, ma, d.datum);
   var sh = blatt_(T.TAG), werte = sh.getDataRange().getValues();
-  for (var i = werte.length - 1; i >= 1; i--) if (String(werte[i][0]) === ma && String(werte[i][1]) === d.datum) sh.deleteRow(i + 1);
+  for (var i = werte.length - 1; i >= 1; i--) if (String(werte[i][0]) === ma && wert_(werte[i][1], 'datum') === d.datum) sh.deleteRow(i + 1);
   if (schliessen) {
     var l = laufend_(ma);
     if (l && l.datum === d.datum) throw new Error('LAEUFT_NOCH');
-    sh.appendRow([ma, d.datum, jetzt_()]);
+    textZeile_(sh, [ma, d.datum, jetzt_()]);
   }
   return monat_(ich, { ma: ma, monat: d.datum.slice(0, 7) });
 }
@@ -375,7 +376,7 @@ function mitarbeiterSpeichern_(d) {
 
 function monatEntsperren_(d) {
   var sh = blatt_(T.SP), w = sh.getDataRange().getValues();
-  for (var i = w.length - 1; i >= 1; i--) if (String(w[i][0]) === d.ma && String(w[i][1]) === d.monat) sh.deleteRow(i + 1);
+  for (var i = w.length - 1; i >= 1; i--) if (String(w[i][0]) === d.ma && wert_(w[i][1], 'monat') === d.monat) sh.deleteRow(i + 1);
   return uebersicht_(d);
 }
 
@@ -487,8 +488,8 @@ function monatsbericht_(d) {
 
   // Bericht merken; gesperrt wird der Monat für den Mitarbeiter erst, wenn er vorbei ist (siehe istGesperrt_)
   var sp = blatt_(T.SP), w = sp.getDataRange().getValues();
-  for (var i = w.length - 1; i >= 1; i--) if (String(w[i][0]) === maId && String(w[i][1]) === monat) sp.deleteRow(i + 1);
-  sp.appendRow([maId, monat, jetzt_(), ss.getId(), pdfDatei.getId()]);
+  for (var i = w.length - 1; i >= 1; i--) if (String(w[i][0]) === maId && wert_(w[i][1], 'monat') === monat) sp.deleteRow(i + 1);
+  textZeile_(sp, [maId, monat, jetzt_(), ss.getId(), pdfDatei.getId()]);
 
   return { pdfUrl: pdfDatei.getUrl(), tabelleUrl: ss.getUrl(), uebersicht: uebersicht_({ monat: monat }) };
 }
@@ -556,6 +557,7 @@ function kopfPruefen_(t) {
   var sh = blatt_(t), n = sh.getLastColumn ? sh.getLastColumn() : t.kopf.length;
   if (n >= t.kopf.length) return;
   sh.getRange(1, 1, 1, t.kopf.length).setValues([t.kopf]);
+  cacheLeeren_(t);
 }
 function pruefeSperre_(ich, ma, datum) {
   if (ich.rolle === 'admin') return;
@@ -568,12 +570,14 @@ function pruefeDatum_(d) { if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d))) throw new
 
 function db_() { return SpreadsheetApp.getActiveSpreadsheet(); }
 function blatt_(t) {
+  if (_B[t.name]) return _B[t.name];
   var sh = db_().getSheetByName(t.name);
   if (!sh) {   // neue Tabellenblätter bei Erweiterungen automatisch anlegen
     sh = db_().insertSheet(t.name);
     sh.getRange(1, 1, sh.getMaxRows(), t.kopf.length).setNumberFormat('@');
     sh.getRange(1, 1, 1, t.kopf.length).setValues([t.kopf]);
   }
+  _B[t.name] = sh;
   return sh;
 }
 
@@ -634,14 +638,44 @@ function pushSenden_(maId, titel, text, prio) {
   } catch (e) { /* Push ist ein Extra – Nachricht ist trotzdem gespeichert */ }
 }
 
+/** Google Tabellen wandeln "07:00" oder "2026-11-10" gern in Datum/Uhrzeit um – hier wieder in Text zurück. */
+function wert_(v, k) {
+  if (v === null || v === undefined) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    if (k === 'start' || k === 'ende' || k === 'pauseStart') return Utilities.formatDate(v, APP.zeitzone, 'HH:mm');
+    if (k === 'datum') return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM-dd');
+    if (k === 'monat') return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM');
+    return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM-dd HH:mm:ss');
+  }
+  return String(v);
+}
+
+/** Zeile als reinen Text anhängen (verhindert die automatische Umwandlung). */
+function textZeile_(sh, werte) {
+  var z = sh.getLastRow() + 1;
+  sh.getRange(z, 1, 1, werte.length).setNumberFormat('@').setValues([werte.map(String)]);
+}
+
+/* Zwischenspeicher pro Anfrage: jede Tabelle wird nur einmal gelesen (schneller) */
+var _C = {}, _B = {};
+var CACHEBAR = { Mitarbeiter: 1, Baustellen: 1, Eintraege: 1, Nachrichten: 1 };
+function cacheLeeren_(t) { if (t) delete _C[t.name]; else _C = {}; }
+
 function zeilen_(t) {
+  if (CACHEBAR[t.name] && _C[t.name]) return _C[t.name].slice();
+  var r = zeilenLesen_(t);
+  if (CACHEBAR[t.name]) _C[t.name] = r;
+  return r.slice();
+}
+
+function zeilenLesen_(t) {
   var w = blatt_(t).getDataRange().getValues();
   var kopf = w[0];
   var r = [];
   for (var i = 1; i < w.length; i++) {
     if (w[i].join('') === '') continue;
     var o = {};
-    for (var k = 0; k < kopf.length; k++) o[kopf[k]] = w[i][k] === null || w[i][k] === undefined ? '' : String(w[i][k]);
+    for (var k = 0; k < kopf.length; k++) o[kopf[k]] = wert_(w[i][k], kopf[k]);
     r.push(o);
   }
   return r;
@@ -650,21 +684,24 @@ function zeilen_(t) {
 function finde_(t, id) { return zeilen_(t).filter(function (o) { return o.id === String(id); })[0] || null; }
 
 function schreiben_(t, obj) {
-  blatt_(t).appendRow(t.kopf.map(function (k) { return obj[k] === undefined ? '' : String(obj[k]); }));
+  cacheLeeren_(t);
+  textZeile_(blatt_(t), t.kopf.map(function (k) { return obj[k] === undefined ? '' : String(obj[k]); }));
 }
 
 function aktualisieren_(t, id, aend) {
+  cacheLeeren_(t);
   var sh = blatt_(t), w = sh.getDataRange().getValues();
   for (var i = 1; i < w.length; i++) {
     if (String(w[i][0]) === String(id)) {
-      var zeile = w[i].map(function (v, k) { var key = t.kopf[k]; return aend[key] === undefined ? String(v) : String(aend[key]); });
-      sh.getRange(i + 1, 1, 1, zeile.length).setValues([zeile]);
+      var zeile = w[i].map(function (v, k) { var key = t.kopf[k]; return aend[key] === undefined ? wert_(v, key) : String(aend[key]); });
+      sh.getRange(i + 1, 1, 1, zeile.length).setNumberFormat('@').setValues([zeile]);
       return;
     }
   }
 }
 
 function loeschen_(t, id) {
+  cacheLeeren_(t);
   var sh = blatt_(t), w = sh.getDataRange().getValues();
   for (var i = w.length - 1; i >= 1; i--) if (String(w[i][0]) === String(id)) sh.deleteRow(i + 1);
 }

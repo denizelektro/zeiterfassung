@@ -255,7 +255,8 @@ function uuid(){ return 'x'+Date.now().toString(36)+Math.random().toString(36).s
 var _beschaeftigt=0;
 function beschaeftigt(n){ _beschaeftigt=Math.max(0,_beschaeftigt+n); document.body.classList.toggle('busy', _beschaeftigt>0); }
 function rufe(aktion, daten){
-  var schreibend=['monat','start','uebersicht'].indexOf(aktion)<0;   // Doppel-Tippen beim Speichern verhindern
+  // Doppel-Tippen nur bei echten Speicher-Aktionen verhindern (Lesen und Stempeln blockieren nichts)
+  var schreibend=['eintragLoeschen','abwesenheit','tagAbschliessen','tagOeffnen','baustelleSpeichern','baustelleLoeschen','mitarbeiterSpeichern','monatsbericht','monatEntsperren','meldungSenden'].indexOf(aktion)>=0 || (aktion==='eintragSpeichern' && !(daten&&daten._hintergrund));
   if(schreibend) beschaeftigt(1);
   var p = rufeRoh(aktion, daten);
   if(schreibend) p.then(function(){ beschaeftigt(-1); }, function(){ beschaeftigt(-1); });
@@ -271,22 +272,25 @@ function rufeRoh(aktion, daten){
 }
 function schlange(){ try{ return JSON.parse(LS.getItem('ze_schlange')||'[]'); }catch(e){ return []; } }
 function setzeSchlange(q){ LS.setItem('ze_schlange', JSON.stringify(q)); zeigeOffline(); }
-function zeigeOffline(){ var n=schlange().length, el=$('offline'); if(!n){ el.classList.add('hidden'); return; }
+function zeigeOffline(){ var n=schlange().length, el=$('offline'); if(!n||(navigator.onLine!==false&&!zeigeOffline.fehl)){ el.classList.add('hidden'); return; }
   el.classList.remove('hidden'); el.textContent = (tr()?'İnternet yok – '+n+' kayıt sonra gönderilecek · ':'')+'Offline – '+n+' Buchung(en) werden später gesendet'; }
 /** Buchung senden; bei fehlendem Netz merken und lokal anzeigen. */
+/** Buchung: sofort anzeigen, im Hintergrund an Google senden (bei fehlendem Netz später). */
 function buchen(aktion, daten){
-  if(schlange().length){ var q=schlange(); q.push({a:aktion,d:daten}); setzeSchlange(q); lokalAnwenden(aktion,daten); render(); return Promise.resolve(); }
-  return rufe(aktion, daten).then(function(m){ monatSetzen(m); render(); }).catch(function(f){
-    if(f.netz){ var q=schlange(); q.push({a:aktion,d:daten}); setzeSchlange(q); lokalAnwenden(aktion,daten); render(); return; }
-    throw f;
-  });
+  if(aktion==='eintragSpeichern') daten._hintergrund=1;
+  lokalAnwenden(aktion,daten); render();
+  var q=schlange(); q.push({a:aktion,d:daten}); setzeSchlange(q);
+  schlangeSenden();
+  return Promise.resolve();
 }
 var sendetGerade=false;
 function schlangeSenden(){
   var q=schlange(); if(!q.length||sendetGerade||!S.token) return;
   sendetGerade=true;
-  rufe(q[0].a, q[0].d).then(function(m){ q.shift(); setzeSchlange(q); monatSetzen(m); sendetGerade=false; if(q.length) schlangeSenden(); else { toast(Lt('speichern')+' ✓'); render(); } })
-  .catch(function(f){ sendetGerade=false; if(!f.netz){ q.shift(); setzeSchlange(q); toast(fehlerText(f)); render(); } });
+  rufeRoh(q[0].a, q[0].d).then(function(m){ q=schlange(); q.shift(); setzeSchlange(q); sendetGerade=false;
+      if(q.length) schlangeSenden(); else { monatSetzen(m); if(!$('blatt').classList.contains('an')) render(); } })
+  .catch(function(f){ sendetGerade=false; if(!f.netz){ q=schlange(); q.shift(); setzeSchlange(q); toast(fehlerText(f));
+      ladeMonat(S.nutzer.id, monatVon(heuteIso())).then(function(){ render(); }).catch(function(){}); } });
 }
 setInterval(schlangeSenden, 20000);
 window.addEventListener('online', schlangeSenden);
