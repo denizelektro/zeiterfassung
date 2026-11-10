@@ -113,6 +113,10 @@
   .schleier.an{opacity:1;pointer-events:auto}
   .blatt{position:fixed;left:0;right:0;bottom:0;max-height:92vh;overflow:auto;background:var(--bg);border-radius:22px 22px 0 0;z-index:21;transform:translateY(105%);transition:transform .25s ease;padding:8px 14px calc(20px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto;-webkit-overflow-scrolling:touch}
   .blatt.an{transform:none}
+  .blatt{overscroll-behavior:contain}
+  body.blattOffen{overflow:hidden}
+  .blatt h2{padding-right:40px}
+  .blattZu{position:absolute;top:8px;right:10px;width:36px;height:36px;border-radius:50%;border:0;background:#e4e8ec;color:#33404d;font-size:1.05rem;line-height:36px;padding:0;cursor:pointer}
   .griff{width:44px;height:5px;border-radius:9px;background:#c4c9cf;margin:4px auto 10px}
   .blatt h2{margin:0 0 12px;font-size:1.15rem;color:var(--navy)}
   label.f{display:block;font-weight:600;font-size:.9rem;margin:12px 0 6px}
@@ -1285,13 +1289,20 @@ var _frageJa=null;
 function frage(text, jaText, ja){ _frageJa=ja;
   oeffneBlatt('<h2 style="margin-bottom:18px">'+text+'</h2><button class="gross b-rot" onclick="var f=_frageJa;schliesseBlatt();f()">'+jaText+'</button><div style="height:8px"></div><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>'); }
 function oeffneBlatt(html, form){
-  var b=$('blatt'); b.innerHTML='<div class="griff"></div>'+html; b.scrollTop=0;
-  $('schleier').classList.add('an'); b.classList.add('an');
-  if(!form){ var y0=null; b.ontouchstart=function(e){ y0 = b.scrollTop<=0 ? e.touches[0].clientY : null; };
-    b.ontouchend=function(e){ if(y0!==null && e.changedTouches[0].clientY-y0>90) schliesseBlatt(); y0=null; }; } else { b.ontouchstart=b.ontouchend=null; }
+  var b=$('blatt'); b.innerHTML='<div class="griff"></div><button class="blattZu" onclick="schliesseBlatt()" aria-label="zu">✕</button>'+html; b.scrollTop=0; b.style.transform='';
+  $('schleier').classList.add('an'); b.classList.add('an'); document.body.classList.add('blattOffen');
 }
-function schliesseBlatt(){ $('blatt').classList.remove('an'); $('schleier').classList.remove('an'); F=null; }
-$('schleier').onclick=schliesseBlatt;
+function schliesseBlatt(){ var b=$('blatt'); b.style.transform=''; b.classList.remove('an'); $('schleier').classList.remove('an'); document.body.classList.remove('blattOffen'); F=null; }
+(function(){ var b=$('blatt'), y0=null, dy=0, zieh=false;
+  b.addEventListener('touchstart',function(e){ var t=e.target, obenTeil=(e.touches[0].clientY-b.getBoundingClientRect().top)<56;
+    if(/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) { y0=null; return; }
+    y0 = (b.scrollTop<=0 || obenTeil) ? e.touches[0].clientY : null; dy=0; zieh=false; },{passive:true});
+  b.addEventListener('touchmove',function(e){ if(y0===null) return; dy=e.touches[0].clientY-y0;
+    if(dy>8 && (b.scrollTop<=0||zieh)){ zieh=true; e.preventDefault(); b.style.transition='none'; b.style.transform='translateY('+dy+'px)'; }
+    else if(!zieh && dy<0) y0=null; },{passive:false});
+  b.addEventListener('touchend',function(){ b.style.transition=''; if(zieh && dy>110) schliesseBlatt(); else b.style.transform=''; y0=null; zieh=false; dy=0; },{passive:true});
+})();
+$('schleier').onclick=schliesseBlatt; $('schleier').addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
 
 /* ======================= NACHRICHTEN ======================= */
 var ARTEN={material:['📦','material'], vorfall:['⚠️','vorfall'], sonstiges:['💬','sonstiges']};
