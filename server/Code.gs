@@ -104,6 +104,7 @@ var AKTIONEN = {
   abrechnung:     { admin: true, fn: function (ich, d) { return abrechnung_(d); } },
   abrechnungTabelle: { admin: true, fn: function (ich, d) { return abrechnungTabelle_(d); } },
   baustelleNeu:   { fn: function (ich, d) { return baustelleNeu_(ich, d); } },
+  meldungFoto:    { ohneLock: true, fn: function (ich, d) { return meldungFoto_(ich, d); } },
   reiseSpeichern: { fn: function (ich, d) { return reiseSpeichern_(ich, d); } },
   lohnliste:      { fn: function (ich, d) { return lohnliste_(ich, d); } },
   zahlungSpeichern:{ fn: function (ich, d) { return zahlungSpeichern_(ich, d); } },
@@ -1289,4 +1290,13 @@ function reiseSpeichern_(ich, d) {
       : { abfahrt: '', ankunft: '', uebern: '', km: '' });
   });
   return monat_(ich, { ma: ma, monat: d.datum.slice(0, 7) });
+}
+
+/** Foto für eine Nachricht in Drive ablegen (Zeiterfassung › Nachrichten-Fotos › Jahr-Monat). */
+function meldungFoto_(ich, d) {
+  var teil = kiDatei_(d, 'bild'), heute = heute_();
+  var name = heute + '_' + Utilities.formatDate(new Date(), APP.zeitzone, 'HHmmss') + '_' + ich.id + '.jpg';
+  var blob = Utilities.newBlob(Utilities.base64Decode(teil.inline_data.data), teil.inline_data.mime_type, name);
+  var ziel = ordner_(ordner_(ordner_(DriveApp.getRootFolder(), APP.ordner), 'Nachrichten-Fotos'), heute.slice(0, 7));
+  return { id: ziel.createFile(blob).getId() };
 }

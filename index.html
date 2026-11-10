@@ -427,6 +427,7 @@ function navKnopf(id, ikon){ return '<button class="'+(S.ansicht===id?'an':'')+'
 function gehe(id){ S.ansicht=id; if(id==='kalender'){ S.kalMonat = S.kalMonat||monatVon(heuteIso()); } render(); window.scrollTo(0,0); }
 function menue(){
   oeffneBlatt('<h2>'+esc(S.nutzer.name)+'</h2>'+
+    '<button class="mittel b-hell" onclick="oeffneBlatt(\'<div id=&quot;pushKarte&quot;></div>\');pushKarte()">🔔 '+(tr()?'<b>Bildirimler</b>&nbsp;/ Benachrichtigungen':'Benachrichtigungen einrichten')+'</button><div style="height:10px"></div>'+
     '<button class="mittel b-hell" onclick="location.reload()">↻ '+(tr()?'<b>Yenile</b>&nbsp;/ Neu laden':'Neu laden')+'</button><div style="height:10px"></div>'+
     '<button class="mittel b-rot" style="color:#fff" onclick="abmelden()">'+L('abmelden')+'</button>');
 }
@@ -1265,9 +1266,8 @@ $('schleier').onclick=schliesseBlatt;
 var ARTEN={material:['📦','material'], vorfall:['⚠️','vorfall'], sonstiges:['💬','sonstiges']};
 function zeigeNachrichten(){
   var h='<button class="gross b-navy" onclick="nachrichtForm()">✉️ '+L('neueNachricht')+'</button><div style="height:12px"></div>';
-  h+='<div id="pushKarte"></div><div id="nliste"><div class="leer">…</div></div>';
+  h+='<div id="nliste"><div class="leer">…</div></div>';
   $('inhalt').innerHTML=h;
-  pushKarte();
   ladeNachrichten();
 }
 function ladeNachrichten(){
@@ -1281,7 +1281,7 @@ function listeNachrichten(){
   el.innerHTML=l.map(function(m){ var a=ARTEN[m.art]||ARTEN.sonstiges, neu=m.fuerMich&&!m.gelesen;
     var z=m.zeit? m.zeit.slice(8,10)+'.'+m.zeit.slice(5,7)+'. '+m.zeit.slice(11,16) : '';
     return '<div class="msg'+(neu?' neu':'')+'"><div class="kopfz"><span>'+a[0]+' <b>'+Lt(a[1])+'</b>'+(m.baustelleName?' · '+esc(m.baustelleName):'')+'</span><span>'+z+'</span></div>'+
-      '<div class="t">'+esc(m.text)+'</div><div class="kopfz"><span>'+(m.fuerMich?(tr()?'Kimden: ':'Von: ')+esc(m.vonName):(tr()?'Kime: ':'An: ')+esc(m.anName))+'</span>'+
+      '<div class="t">'+esc(m.text).replace(/(https:\/\/drive\.google\.com\/file\/d\/[\w-]+\/view)/g,'<a class="link" href="$1" target="_blank">📷 Foto</a>')+'</div><div class="kopfz"><span>'+(m.fuerMich?(tr()?'Kimden: ':'Von: ')+esc(m.vonName):(tr()?'Kime: ':'An: ')+esc(m.anName))+'</span>'+
       (neu?'<button class="pill p-gruen" onclick="nachrichtGelesen(\''+m.id+'\')">✓ '+Lt('erledigt')+'</button>':(m.gelesen&&!m.fuerMich?'<span>✓✓ '+(tr()?'okundu / ':'')+'gelesen</span>':''))+'</div></div>'; }).join('');
 }
 function nachrichtGelesen(id){ rufe('meldungGelesen',{id:id}).then(function(d){ S.nachr=d.liste; S.ungelesen=d.ungelesen; listeNachrichten(); badgeAktualisieren(); }).catch(function(f){ toast(fehlerText(f)); }); }
@@ -1295,13 +1295,24 @@ function nachrichtForm(art){
   else h+='<p class="klein" style="margin:10px 0 0">'+L('anChef')+' ✓</p>';
   h+='<label class="f">'+L('baustelle','inl')+'</label><select class="eing" id="nfBs"><option value="">–</option>'+S.baustellen.map(function(b){return '<option value="'+b.id+'" '+(NF.baustelle===b.id?'selected':'')+'>'+esc(b.name)+'</option>';}).join('')+'</select>';
   h+='<label class="f">'+L('nachrichtText','inl')+'</label><textarea class="eing" id="nfText" style="min-height:120px" placeholder="'+(NF.art==='material'?(tr()?'örn. 50 m NYM 3x1,5 · 10 priz kutusu / ':'')+'z. B. 50 m NYM 3x1,5 · 10 Schalterdosen':'')+'">'+esc(NF.text)+'</textarea>';
+  h+='<div class="belege" id="nfFotos">'+(NF.fotos||[]).map(function(f,i){ return '<span>📷 '+(i+1)+' ✓</span>'; }).join('')+'</div>'+
+     '<button class="mittel b-hell" id="nfFotoB" onclick="nfFoto()">📷 '+L('foto')+'</button>';
   h+='<div id="fFehler"></div><div style="height:14px"></div><button class="gross b-gruen" onclick="nachrichtSenden()">📨 '+L('senden')+'</button><div style="height:8px"></div><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>';
   oeffneBlatt(h,true);
 }
 function nfLesen(){ if(!NF) return; var a=$('nfAn'),b=$('nfBs'),t=$('nfText'); if(a) NF.an=a.value; if(b) NF.baustelle=b.value; if(t) NF.text=t.value; }
+function nfFoto(){
+  var inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+  inp.onchange=function(){ var f=inp.files&&inp.files[0]; if(!f) return; nfLesen(); var b=$('nfFotoB'); if(b) b.innerHTML='⏳ …';
+    bildKlein(f,1600).then(function(b64){ return rufeRoh('meldungFoto',{daten:b64, mime:'image/jpeg'}); })
+      .then(function(r){ NF.fotos=(NF.fotos||[]).concat([r.id]); nachrichtForm(); })
+      .catch(function(e){ toast(fehlerText(e)); nachrichtForm(); }); };
+  inp.click();
+}
 function nachrichtSenden(){
-  nfLesen(); if(!NF.text.trim()) return fFehler(Lt('nachrichtText')+' ?');
-  rufe('meldungSenden',{art:NF.art, baustelle:NF.baustelle, an:NF.an, text:NF.text}).then(function(d){ NF=null; S.nachr=d.liste; schliesseBlatt(); toast('📨 '+(tr()?'Gönderildi / ':'')+'Gesendet'); if(S.ansicht!=='nachrichten') gehe('nachrichten'); else listeNachrichten(); })
+  nfLesen(); if(!NF.text.trim() && !(NF.fotos||[]).length) return fFehler(Lt('nachrichtText')+' ?');
+  var text=NF.text+((NF.fotos||[]).length?'\n'+NF.fotos.map(function(id){ return 'https://drive.google.com/file/d/'+id+'/view'; }).join('\n'):'');
+  rufe('meldungSenden',{art:NF.art, baustelle:NF.baustelle, an:NF.an, text:text}).then(function(d){ NF=null; S.nachr=d.liste; schliesseBlatt(); toast('📨 '+(tr()?'Gönderildi / ':'')+'Gesendet'); if(S.ansicht!=='nachrichten') gehe('nachrichten'); else listeNachrichten(); })
     .catch(function(f){ fFehler(fehlerText(f)); });
 }
 function pushKarte(){
