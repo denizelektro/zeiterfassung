@@ -498,7 +498,45 @@ function navi(id){
       '<button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>'); return; }
   window.open(gmaps,'_blank');
 }
-function waehleBs(id){ S.auswahlBs=id; LS.setItem('ze_letzteBs',id); zeigeHeute(); }
+function waehleBs(id){ S.auswahlBs=id; LS.setItem('ze_letzteBs',id); zeigeHeute(); bsSeite(id); }
+/* Baustellen-Seite: Kunde, Navi, Arbeit beginnen, Material erfassen, letzte Einträge */
+function bsEintraege(id){
+  var aus=[]; Object.keys(S.monate).forEach(function(k){ if(k.indexOf(S.nutzer.id+'|')!==0) return;
+    (S.monate[k].eintraege||[]).forEach(function(e){ if(e.typ==='A' && e.baustelle===id && e.ma===S.nutzer.id) aus.push(e); }); });
+  var ids={}; aus=aus.filter(function(e){ if(ids[e.id]) return false; ids[e.id]=1; return true; });
+  return aus.sort(function(a,b){ return (b.datum+b.start)<(a.datum+a.start)?-1:1; });
+}
+function bsSeite(id){
+  var b=S.baustellen.filter(function(x){return x.id===id;})[0]; if(!b) return;
+  var es=bsEintraege(id), heute=heuteIso(), l=S.laufend;
+  var h='<h2>🏗 '+esc(b.name)+'</h2>'+(b.adresse?'<div class="klein" style="margin:-6px 0 10px">'+esc(b.adresse)+'</div>':'');
+  h+='<div class="reihe" style="margin-bottom:10px">'+(b.adresse?'<button class="mittel b-hell" onclick="navi(\''+id+'\')">📍 '+L('navi')+'</button>':'')+
+     (!l?'<button class="mittel b-gruen" style="color:#fff" onclick="schliesseBlatt();stempel(\'beginn\',\''+id+'\')">▶ '+L('beginnen')+'</button>':'')+'</div>';
+  h+='<p class="titel" style="margin:6px 0">'+L('material')+' / '+L('taetigkeit')+'</p><div class="kiReihe">'+
+     '<button onclick="bsErfassen(\''+id+'\',\'sprache\')">🎤 '+L('sprechen')+'</button>'+
+     '<button onclick="bsErfassen(\''+id+'\',\'foto\')">📷 '+L('foto')+'</button>'+
+     '<button onclick="bsErfassen(\''+id+'\',\'beleg\')">🧾 '+L('beleg')+'</button>'+
+     '<button onclick="bsErfassen(\''+id+'\',\'form\')">✏️ '+L('ergaenzen')+'</button></div>';
+  // Material-Summe auf dieser Baustelle
+  var mat={}; es.forEach(function(e){ (e.material||[]).forEach(function(m){ var k=(m.text||'').trim().toLowerCase()+'|'+(m.einheit||''); var z=mat[k]||(mat[k]={text:m.text,einheit:m.einheit,menge:0}); z.menge+=zahl(m.menge); }); });
+  var mk=Object.keys(mat);
+  if(mk.length) h+='<div class="karte" style="margin-top:10px"><p class="titel">📦 '+(tr()?'Toplam malzeme / ':'')+'Material bisher</p>'+mk.map(function(k){ var z=mat[k]; return '<div class="klein" style="padding:3px 0"><b>'+String(Math.round(z.menge*100)/100).replace('.',',')+' '+esc(z.einheit||'')+'</b> '+esc(z.text)+'</div>'; }).join('')+'</div>';
+  h+='<p class="titel" style="margin:12px 0 6px">'+(tr()?'Son kayıtlar / ':'')+'Letzte Einträge</p>';
+  h+= es.length ? es.slice(0,8).map(function(e){ return '<button class="eintrag" onclick="eintragForm(\''+e.id+'\')"><div class="k"><span class="bsn">'+datumKurz(e.datum)+'</span><span class="std">'+(e.ende?fStd(std(e))+' h':'● '+e.start)+'</span></div>'+
+      (e.taetigkeit?'<div class="taet">'+esc(e.taetigkeit)+'</div>':'')+(e.material&&e.material.length?'<div class="klein">📦 '+e.material.length+' '+(tr()?'malzeme':'Material')+'</div>':'')+'</button>'; }).join('')
+    : '<div class="leer">'+L('kein')+'</div>';
+  oeffneBlatt(h);
+}
+function datumKurz(i){ return i.slice(8,10)+'.'+i.slice(5,7)+'.'; }
+function bsErfassen(id, was){
+  var heute=heuteIso(), l=S.laufend;
+  var e = (l && l.baustelle===id) ? findeEintrag(l.id) : bsEintraege(id).filter(function(x){ return x.datum===heute; })[0];
+  S.auswahlBs=id;
+  if(e) eintragForm(e.id); else { eintragForm(null, heute); F.baustelle=id; zeichneForm(); }
+  if(was==='sprache') kiSprache('material');
+  else if(was==='foto'||was==='beleg') kiBild(was);
+  else setTimeout(function(){ var el=$('fMat'); if(el) el.scrollIntoView({block:'center'}); },150);
+}
 function stempel(art, bs){
   var ld=S.laufend&&/^\d{4}-\d{2}-\d{2}$/.test(S.laufend.datum)?S.laufend.datum:heuteIso();
   var d={art:art, zeit:jetztZeit(), datum:(S.laufend&&art!=='beginn'&&art!=='wechsel')?ld:heuteIso()};
