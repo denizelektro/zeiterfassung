@@ -98,6 +98,8 @@ var AKTIONEN = {
   kiSprache:      { ohneLock: true, fn: function (ich, d) { return kiSprache_(ich, d); } },
   kiFoto:         { ohneLock: true, fn: function (ich, d) { return kiFoto_(ich, d); } },
   belegHochladen: { ohneLock: true, fn: function (ich, d) { return belegHochladen_(ich, d); } },
+  abrechnung:     { admin: true, fn: function (ich, d) { return abrechnung_(d); } },
+  abrechnungTabelle: { admin: true, fn: function (ich, d) { return abrechnungTabelle_(d); } },
   kiSchluessel:   { admin: true, fn: function (ich, d) { return kiSchluessel_(d); } },
   kiDiagnose:     { admin: true, ohneLock: true, fn: function (ich, d) { return kiDiagnose_(d); } }
 };
@@ -946,3 +948,83 @@ function belegeLesen_(v) { try { var b = v ? JSON.parse(v) : []; return Array.is
 
 /** Im Editor ausführen: misst, wie schnell die KI-Modelle antworten. */
 function kiTesten() { kiDiagnose_({}).forEach(function (z) { console.log(z); }); }
+
+/* ============================ Abrechnung je Baustelle ============================ */
+
+function abrechnung_(d) {
+  var bs = finde_(T.BS, String(d.baustelle || ''));
+  if (!bs) throw new Error('Baustelle wählen');
+  var von = String(d.von || ''), bis = String(d.bis || '');
+  pruefeDatum_(von); pruefeDatum_(bis);
+  var namen = {}; zeilen_(T.MA).forEach(function (m) { namen[m.id] = m.name; });
+  var es = zeilen_(T.E).filter(function (e) { return e.typ === 'A' && e.baustelle === bs.id && e.datum >= von && e.datum <= bis; })
+    .map(eintragAus_).sort(function (a, b) { return (a.datum + a.start) < (b.datum + b.start) ? -1 : 1; });
+  var pers = {}, mat = {}, km = 0, belege = [], tage = [], offen = 0;
+  es.forEach(function (e) {
+    var h = stunden_(e); if (!e.ende) offen++;
+    var p = pers[e.ma] || (pers[e.ma] = { id: e.ma, name: namen[e.ma] || e.ma, stunden: 0, tage: {} });
+    p.stunden += h; p.tage[e.datum] = 1;
+    km += Number(e.km || 0);
+    (e.material || []).forEach(function (m) {
+      var k = String(m.text).trim().toLowerCase() + '|' + (m.einheit || '');
+      var z = mat[k] || (mat[k] = { text: String(m.text).trim(), einheit: m.einheit || '', menge: 0, ek: 0, ohnePreis: false });
+      var n = Number(String(m.menge || '').replace(',', '.')); z.menge += isNaN(n) ? 0 : n;
+      if (m.preis != null && m.preis !== '') z.ek += Number(m.preis); else z.ohnePreis = true;
+    });
+    (e.belege || []).forEach(function (b) { belege.push({ id: b.id, name: b.name, datum: e.datum }); });
+    tage.push({ datum: e.datum, ma: namen[e.ma] || e.ma, start: e.start, ende: e.ende || '', std: Math.round(h * 100) / 100, taetigkeit: e.taetigkeit || '' });
+  });
+  var r2 = function (x) { return Math.round(x * 100) / 100; };
+  return {
+    baustelle: { id: bs.id, name: bs.name, adresse: bs.adresse || '' }, von: von, bis: bis, offen: offen,
+    personen: Object.keys(pers).map(function (k) { var p = pers[k]; return { id: p.id, name: p.name, stunden: r2(p.stunden), tage: Object.keys(p.tage).length }; }),
+    material: Object.keys(mat).map(function (k) { var z = mat[k]; z.menge = r2(z.menge); z.ek = r2(z.ek); return z; })
+      .sort(function (a, b) { return a.text.localeCompare(b.text, 'de'); }),
+    km: r2(km), belege: belege, tage: tage
+  };
+}
+
+function abrechnungTabelle_(d) {
+  var a = abrechnung_(d), satz = d.saetze || {}, auf = Number(d.aufschlag || 0) / 100;
+  var titel = 'Abrechnung ' + a.baustelle.name + ' ' + deDatum_(a.von) + ' – ' + deDatum_(a.bis);
+  var ss = SpreadsheetApp.create(titel), sh = ss.getSheets()[0];
+  sh.setName('Abrechnung');
+  var z = [];
+  z.push(['Abrechnungsübersicht (intern) – ' + APP.firma, '', '', '', '', '']);
+  z.push(['Baustelle', a.baustelle.name + (a.baustelle.adresse ? ', ' + a.baustelle.adresse : ''), '', '', '', '']);
+  z.push(['Zeitraum', deDatum_(a.von) + ' – ' + deDatum_(a.bis), '', '', '', '']);
+  z.push(['', '', '', '', '', '']);
+  z.push(['ARBEITSZEIT', 'Stunden', 'Tage', '€/Std. netto', 'Summe netto', '']);
+  var lohnStart = z.length + 1;
+  a.personen.forEach(function (p) { var r = z.length + 1; z.push([p.name, p.stunden, p.tage, Number(satz[p.id] || 0), '=B' + r + '*D' + r, '']); });
+  var lohnEnde = z.length;
+  z.push(['Summe Arbeitszeit', '', '', '', a.personen.length ? '=SUM(E' + lohnStart + ':E' + lohnEnde + ')' : 0, '']);
+  var lohnSumme = z.length;
+  z.push(['', '', '', '', '', '']);
+  z.push(['MATERIAL', 'Menge', 'Einheit', 'EK gesamt', 'VK netto (+' + Math.round(auf * 100) + ' %)', 'Hinweis']);
+  var matStart = z.length + 1;
+  a.material.forEach(function (m) { var r = z.length + 1; z.push([m.text, m.menge, m.einheit, m.ek || '', '=D' + r + '*' + (1 + auf), m.ohnePreis ? 'Preis fehlt' : '']); });
+  var matEnde = z.length;
+  z.push(['Summe Material', '', '', a.material.length ? '=SUM(D' + matStart + ':D' + matEnde + ')' : 0, a.material.length ? '=SUM(E' + matStart + ':E' + matEnde + ')' : 0, '']);
+  var matSumme = z.length;
+  z.push(['', '', '', '', '', '']);
+  z.push(['GESAMT NETTO', '', '', '', '=E' + lohnSumme + '+E' + matSumme, '']);
+  z.push(['Gefahrene km', a.km, '', '', '', '']);
+  z.push(['', '', '', '', '', '']);
+  z.push(['TAGE', 'Mitarbeiter', 'Zeit', 'Std.', 'Tätigkeit', '']);
+  a.tage.forEach(function (t) { z.push([deDatum_(t.datum), t.ma, t.start + '–' + (t.ende || '…'), t.std, t.taetigkeit, '']); });
+  if (a.belege.length) {
+    z.push(['', '', '', '', '', '']); z.push(['BELEGE', '', '', '', '', '']);
+    a.belege.forEach(function (b) { z.push([deDatum_(b.datum), b.name, '', '', 'https://drive.google.com/file/d/' + b.id + '/view', '']); });
+  }
+  sh.getRange(1, 1, z.length, 6).setValues(z);
+  sh.getRange(1, 1).setFontSize(14).setFontWeight('bold');
+  [5, matStart - 1, lohnSumme, matSumme, matSumme + 2].forEach(function (r) { sh.getRange(r, 1, 1, 6).setFontWeight('bold'); });
+  sh.getRange(lohnStart, 4, Math.max(1, lohnSumme - lohnStart + 1), 2).setNumberFormat('#,##0.00 €');
+  sh.getRange(matStart, 4, Math.max(1, matSumme - matStart + 1), 2).setNumberFormat('#,##0.00 €');
+  sh.getRange(matSumme + 2, 5).setNumberFormat('#,##0.00 €');
+  sh.setColumnWidth(1, 260); sh.setColumnWidth(5, 280);
+  var root = ordner_(DriveApp.getRootFolder(), APP.ordner), ziel = ordner_(root, 'Abrechnungen');
+  var f = DriveApp.getFileById(ss.getId()); f.moveTo(ziel);
+  return { url: ss.getUrl() };
+}

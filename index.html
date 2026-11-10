@@ -821,7 +821,7 @@ function abwSpeichern(){
 
 /* ======================= VERWALTUNG (nur Admin) ======================= */
 function zeigeVerwaltung(){
-  var h='<div class="tabs">'+[['monat','Monat'],['baustellen','Baustellen'],['team','Team']].map(function(t){return '<button class="'+(S.adminTab===t[0]?'an':'')+'" onclick="S.adminTab=\''+t[0]+'\';zeigeVerwaltung()">'+t[1]+'</button>';}).join('')+'</div>';
+  var h='<div class="tabs">'+[['monat','Monat'],['abrechnung','Abrechnung'],['baustellen','Baustellen'],['team','Team']].map(function(t){return '<button class="'+(S.adminTab===t[0]?'an':'')+'" onclick="S.adminTab=\''+t[0]+'\';zeigeVerwaltung()">'+t[1]+'</button>';}).join('')+'</div>';
   if(S.adminTab==='monat'){
     h+='<div class="kal-kopf"><button class="pfeil" onclick="S.adminMonat=monatPlus(S.adminMonat,-1);S.uebersicht=null;zeigeVerwaltung()">‹</button><div class="mon">'+DE_MON[+S.adminMonat.slice(5,7)-1]+' '+S.adminMonat.slice(0,4)+'</div><button class="pfeil" onclick="S.adminMonat=monatPlus(S.adminMonat,1);S.uebersicht=null;zeigeVerwaltung()">›</button></div>';
     if(!S.uebersicht || S.uebersicht.monat!==S.adminMonat){
@@ -844,6 +844,7 @@ function zeigeVerwaltung(){
     });
     h+='<p class="klein">Der Stundenzettel wird als Tabelle + PDF in Google Drive unter „Zeiterfassung/Monatsberichte“ gespeichert. Mitten im Monat ist er ein Zwischenstand; ist der Monat vorbei, wird er danach für den Mitarbeiter gesperrt (du kannst weiter korrigieren).</p>';
   }
+  if(S.adminTab==='abrechnung'){ $('inhalt').innerHTML=h+abrechnungHtml(); return; }
   if(S.adminTab==='baustellen'){
     h+='<div class="karte"><p class="titel">Neue Baustelle</p><input class="eing" id="nbName" placeholder="Name / Kunde (z. B. Sonnenhagen Hannover)"><div style="height:8px"></div><input class="eing" id="nbAdr" placeholder="Adresse (optional)"><div style="height:10px"></div><button class="mittel b-gruen" style="color:#fff" onclick="bsSpeichern()">＋ Anlegen</button></div>';
     h+='<div class="karte">'+(S.alleBaustellen.length?S.alleBaustellen.map(function(b){ return '<div class="zeileL"><div><b style="'+(b.aktiv?'':'opacity:.45')+'">'+esc(b.name)+'</b>'+(b.adresse?'<div class="klein">'+esc(b.adresse)+'</div>':'')+'</div>'+
@@ -870,6 +871,54 @@ function entsperren(id){ frage('Monat wieder freigeben? Der Mitarbeiter kann dan
 function entsperrenJetzt(id){
   rufe('monatEntsperren',{ma:id, monat:S.adminMonat}).then(function(u){ S.uebersicht={monat:S.adminMonat,liste:u}; delete S.monate[schl(id,S.adminMonat)]; zeigeVerwaltung(); }).catch(function(f){ toast(fehlerText(f)); }); }
 function istPC(){ try{ return matchMedia('(pointer:fine)').matches && !matchMedia('(pointer:coarse)').matches && window.innerWidth>=700; }catch(e){ return false; } }
+/* ======================= Abrechnung je Baustelle ======================= */
+var AB={bs:'', von:'', bis:'', daten:null};
+function abSatz(id){ var v=LS.getItem('ze_satz_'+id); return v===null?'':v; }
+function abAufschlag(){ var v=LS.getItem('ze_aufschlag'); return v===null?'30':v; }
+function zahl(v){ var n=parseFloat(String(v==null?'':v).replace(',','.')); return isNaN(n)?0:n; }
+function abrechnungHtml(){
+  if(!AB.von){ var t=heuteIso(); AB.von=t.slice(0,8)+'01'; AB.bis=t; }
+  var bsl=S.alleBaustellen.length?S.alleBaustellen:S.baustellen;
+  if(!AB.bs && bsl[0]) AB.bs=(S.auswahlBs||bsl[0].id);
+  var h='<div class="karte"><p class="titel">Abrechnung für sevdesk</p>'+
+    '<label class="f">Baustelle</label><select class="eing" id="abBs" onchange="AB.bs=this.value;AB.daten=null">'+bsl.map(function(b){return '<option value="'+b.id+'" '+(b.id===AB.bs?'selected':'')+'>'+esc(b.name)+'</option>';}).join('')+'</select>'+
+    '<div class="reihe"><div><label class="f">Von</label><input type="date" class="eing" id="abVon" value="'+AB.von+'" onchange="AB.von=this.value;AB.daten=null"></div><div><label class="f">Bis</label><input type="date" class="eing" id="abBis" value="'+AB.bis+'" onchange="AB.bis=this.value;AB.daten=null"></div></div>'+
+    '<div style="height:10px"></div><button class="mittel b-navy" style="color:#fff" onclick="abLaden()">Anzeigen</button></div>';
+  var a=AB.daten; if(!a) return h;
+  var auf=abAufschlag(), lohn=0, ek=0;
+  h+='<div class="karte"><p class="titel">'+esc(a.baustelle.name)+'</p>'+(a.baustelle.adresse?'<div class="klein">'+esc(a.baustelle.adresse)+'</div>':'')+
+     '<div class="klein">'+deD(a.von)+' – '+deD(a.bis)+'</div>'+(a.offen?'<div class="hinweis" style="margin-top:8px">⚠ '+a.offen+' Eintrag/Einträge noch ohne Feierabend – Stunden fehlen dort.</div>':'')+'</div>';
+  h+='<div class="karte"><p class="titel">⏱ Arbeitszeit</p>'+(a.personen.length?a.personen.map(function(p){ var sz=abSatz(p.id), sum=p.stunden*zahl(sz); lohn+=sum;
+      return '<div class="zeileL"><div><b>'+esc(p.name)+'</b><div class="klein">'+fStd(p.stunden)+' Std. · '+p.tage+' Tag(e)</div></div><div style="display:flex;align-items:center;gap:6px"><input class="eing" style="width:78px;padding:8px" inputmode="decimal" placeholder="€/Std" value="'+esc(sz)+'" onchange="LS.setItem(\'ze_satz_'+p.id+'\',this.value);zeigeVerwaltung()"><b style="min-width:84px;text-align:right">'+euro(sum)+'</b></div></div>'; }).join(''):'<div class="leer">Keine Stunden</div>')+
+     '<div style="text-align:right;font-weight:800;margin-top:6px">'+euro(lohn)+'</div></div>';
+  var fehlt=0;
+  h+='<div class="karte"><p class="titel">📦 Material <span class="klein">Aufschlag <input class="eing" style="width:58px;padding:6px;display:inline-block" inputmode="decimal" value="'+esc(auf)+'" onchange="LS.setItem(\'ze_aufschlag\',this.value);zeigeVerwaltung()"> %</span></p>'+
+     (a.material.length?a.material.map(function(m){ ek+=m.ek; if(m.ohnePreis) fehlt++;
+       return '<div class="zeileL"><div><b>'+esc(String(m.menge).replace('.',','))+' '+esc(m.einheit)+'</b> '+esc(m.text)+(m.ohnePreis?' <span class="pill p-gelb">Preis fehlt</span>':'')+'</div><div style="text-align:right;white-space:nowrap"><div class="klein">EK '+euro(m.ek)+'</div><b>'+euro(m.ek*(1+zahl(auf)/100))+'</b></div></div>'; }).join(''):'<div class="leer">Kein Material</div>')+
+     '<div style="text-align:right;margin-top:6px"><span class="klein">EK '+euro(ek)+'</span> · <b>VK '+euro(ek*(1+zahl(auf)/100))+'</b></div>'+
+     (fehlt?'<div class="klein" style="margin-top:6px">Preise fehlen? Eintrag im Kalender öffnen und das €‑Feld ausfüllen.</div>':'')+'</div>';
+  var ges=lohn+ek*(1+zahl(auf)/100);
+  h+='<div class="karte" style="text-align:center"><div class="klein">Gesamt netto</div><div style="font-size:1.6rem;font-weight:800;color:var(--navy)">'+euro(ges)+'</div><div class="klein">zzgl. 19 % MwSt. = '+euro(ges*1.19)+' brutto'+(a.km?' · '+fStd(a.km)+' km gefahren':'')+'</div></div>';
+  if(a.belege.length) h+='<div class="karte"><p class="titel">🧾 Belege</p><div class="belege">'+a.belege.map(function(b){ return '<span><a href="https://drive.google.com/file/d/'+esc(b.id)+'/view" target="_blank">🧾 '+esc(b.name.replace(/\.jpg$/,''))+'</a></span>'; }).join('')+'</div></div>';
+  if(a.tage.length) h+='<div class="karte"><p class="titel">📅 Tage & Tätigkeiten</p>'+a.tage.map(function(t){ return '<div class="zeileL"><div><b>'+deD(t.datum)+'</b> · '+esc(t.ma)+'<div class="klein">'+esc(t.taetigkeit||'—')+'</div></div><div class="klein" style="white-space:nowrap">'+t.start+'–'+(t.ende||'…')+' · '+fStd(t.std)+' h</div></div>'; }).join('')+'</div>';
+  h+='<button class="mittel b-gruen" style="color:#fff" id="abTab" onclick="abTabelle()">📄 Als Tabelle in Google Drive speichern</button>'+
+     '<p class="klein">Liegt dann unter „Zeiterfassung › Abrechnungen“. Daraus trägt Claude die Rechnung in sevdesk ein.</p>';
+  return h;
+}
+function deD(i){ return i.slice(8,10)+'.'+i.slice(5,7)+'.'+i.slice(0,4); }
+function abLaden(){
+  AB.bs=$('abBs').value; AB.von=$('abVon').value; AB.bis=$('abBis').value;
+  $('inhalt').insertAdjacentHTML('beforeend','<div class="lade" style="min-height:120px">…</div>');
+  rufe('abrechnung',{baustelle:AB.bs, von:AB.von, bis:AB.bis}).then(function(a){ AB.daten=a; zeigeVerwaltung(); }).catch(function(f){ toast(fehlerText(f)); zeigeVerwaltung(); });
+}
+function abTabelle(){
+  var b=$('abTab'); b.disabled=true; b.innerHTML='⏳ wird erstellt…';
+  var saetze={}; (AB.daten.personen||[]).forEach(function(p){ saetze[p.id]=zahl(abSatz(p.id)); });
+  rufe('abrechnungTabelle',{baustelle:AB.bs, von:AB.von, bis:AB.bis, saetze:saetze, aufschlag:zahl(abAufschlag())}).then(function(r){
+    b.disabled=false; b.innerHTML='📄 Als Tabelle in Google Drive speichern';
+    oeffneBlatt('<h2>✓ Abrechnung gespeichert</h2><p>In Google Drive unter <b>Zeiterfassung › Abrechnungen</b>.</p><a class="mittel b-navy" style="color:#fff;text-decoration:none" href="'+r.url+'" target="_blank">Tabelle öffnen</a>');
+  }).catch(function(f){ b.disabled=false; b.innerHTML='📄 Als Tabelle in Google Drive speichern'; toast(fehlerText(f)); });
+}
 function kiKeySpeichern(){
   var k=$('kiKey').value.trim(); if(!k) return;
   rufe('kiSchluessel',{schluessel:k}).then(function(r){ S.kiAktiv=r.kiAktiv; try{ var st=JSON.parse(LS.getItem('ze_start')); st.kiAktiv=r.kiAktiv; LS.setItem('ze_start',JSON.stringify(st)); }catch(e){} toast('✓ KI aktiv'); zeigeVerwaltung(); })
