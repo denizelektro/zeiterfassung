@@ -494,11 +494,13 @@ function rpL(a){ var t=RP_TXT[a]; return tr()?'<b>'+t[1]+'</b><br><small>'+t[2]+
 function punktKarte(arten){
   var P=(S.reiseP&&S.reiseP.datum===heuteIso())?S.reiseP.punkte:[], h='<div class="karte reiseK">';
   arten.forEach(function(a){ var p=P.filter(function(x){return x.art===a;})[0];
-    h+= p ? '<div class="rpZ"><span>'+RP_TXT[a][0]+' '+rpL(a)+'</span><b>'+p.zeit+(p.lat!=null?' ✓':' ⚠')+'</b></div>'
+    var K=S.reiseKm||{}, kmTxt = a==='ankunftBs'&&K.hin!=null ? '<div class="klein">'+(tr()?'Gidiş ':'Hinweg ')+'≈ '+K.hin+' km</div>' : a==='ankunft'&&K.rueck!=null ? '<div class="klein">'+(tr()?'Dönüş ':'Rückweg ')+'≈ '+K.rueck+' km</div>' : '';
+    h+= p ? '<div class="rpZ"><span>'+RP_TXT[a][0]+' '+rpL(a)+kmTxt+'</span><b>'+p.zeit+(p.lat!=null?' ✓':' ⚠')+'</b></div>'
           : '<button class="gross '+(a==='ankunft'?'b-blau':'b-navy')+'" style="margin:6px 0" onclick="reisePunktSetzen(\''+a+'\')">'+RP_TXT[a][0]+' '+rpL(a)+'</button>'; });
   return h+'</div>';
 }
-function reisePLaden(){ rufeRoh('reisePunkte',{datum:heuteIso()}).then(function(r){ S.reiseP=r; if(S.ansicht==='reise') render(); }).catch(function(){}); }
+function reisePLaden(){ rufeRoh('reisePunkte',{datum:heuteIso()}).then(function(r){ S.reiseP=r; if(S.ansicht==='reise') render(); if(r.punkte.length>1) reiseKmLaden(); }).catch(function(){}); }
+function reiseKmLaden(){ rufeRoh('reiseKm',{datum:heuteIso()}).then(function(k){ S.reiseKm=k; if(S.ansicht==='reise') render(); }).catch(function(){}); }
 function standort(){ return new Promise(function(ok){ if(!navigator.geolocation) return ok(null);
   navigator.geolocation.getCurrentPosition(function(p){ ok({lat:p.coords.latitude,lng:p.coords.longitude,gen:p.coords.accuracy}); }, function(){ ok(null); }, {enableHighAccuracy:true, timeout:20000, maximumAge:0}); }); }
 function reisePunktSetzen(art){
@@ -506,7 +508,7 @@ function reisePunktSetzen(art){
   standort().then(function(pos){
     if(!pos) toast((tr()?'Konum alınamadı / ':'')+'Standort nicht verfügbar – nur Uhrzeit gespeichert');
     return rufe('reisePunkt',{datum:heuteIso(), art:art, zeit:zeit, lat:pos&&pos.lat, lng:pos&&pos.lng, gen:pos&&pos.gen});
-  }).then(function(r){ S.reiseP=r; toast('✓ '+zeit); render(); if(art==='ankunft') setTimeout(reiseForm,300); })
+  }).then(function(r){ S.reiseP=r; toast('✓ '+zeit); render(); if(art==='ankunftBs'||art==='ankunft') reiseKmLaden(); if(art==='ankunft') setTimeout(reiseForm,300); })
     .catch(function(f){ toast(fehlerText(f)); });
 }
 function abfahrtJetzt(){ LS.setItem('ze_reise',JSON.stringify({datum:heuteIso(), abfahrt:jetztZeit()})); toast('✓ '+jetztZeit()); render(); }
