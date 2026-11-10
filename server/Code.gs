@@ -109,7 +109,8 @@ var KI_EINHEITEN = 'Stk, m, Pkt, Rolle, kg, Sack';
 function kiSchluessel_(d) {
   var k = String(d.schluessel || '').trim(), props = PropertiesService.getScriptProperties();
   if (!k) { props.deleteProperty('KI_KEY'); return { kiAktiv: false }; }
-  if (!/^[\w-]{20,}$/.test(k)) throw new Error('Schlüssel sieht nicht richtig aus');
+  k = k.replace(/\s+/g, '');
+  if (!/^[\w.\-]{20,200}$/.test(k)) throw new Error('Schlüssel sieht nicht richtig aus');
   var alt = props.getProperty('KI_KEY');
   props.setProperty('KI_KEY', k);
   try { kiFrage_([{ text: 'Antworte nur mit {"ok":true}' }]); }
