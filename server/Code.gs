@@ -12,7 +12,9 @@ var APP = {
   logoName: 'LOGO_NEU_07.07.26-removebg-preview.png',
   firma: 'Baudienstleistungen D. Söner',
   tokenTage: 365,                    // so lange bleibt ein Handy angemeldet
-  zeitzone: 'Europe/Berlin'
+  zeitzone: 'Europe/Berlin',
+  // Meine Ablage › Gewerbe › Gewerbe D.Söner › Rechn.-Angebot  (darin Jahres-Ordner)
+  rechnungsOrdnerId: '1ozfjn9T2Ofchk7JaRp0C2CV2Z97X4tic'
 };
 
 var T = {
@@ -986,7 +988,7 @@ function abrechnung_(d) {
 
 function abrechnungTabelle_(d) {
   var a = abrechnung_(d), satz = d.saetze || {}, auf = Number(d.aufschlag || 0) / 100;
-  var titel = 'Abrechnung ' + a.baustelle.name + ' ' + deDatum_(a.von) + ' – ' + deDatum_(a.bis);
+  var titel = a.baustelle.name + ' vorläufige Rechnung ' + deDatum_(a.von) + ' – ' + deDatum_(a.bis);
   var ss = SpreadsheetApp.create(titel), sh = ss.getSheets()[0];
   sh.setName('Abrechnung');
   var z = [];
@@ -1024,7 +1026,11 @@ function abrechnungTabelle_(d) {
   sh.getRange(matStart, 4, Math.max(1, matSumme - matStart + 1), 2).setNumberFormat('#,##0.00 €');
   sh.getRange(matSumme + 2, 5).setNumberFormat('#,##0.00 €');
   sh.setColumnWidth(1, 260); sh.setColumnWidth(5, 280);
-  var root = ordner_(DriveApp.getRootFolder(), APP.ordner), ziel = ordner_(root, 'Abrechnungen');
+  // Ablage: Rechn.-Angebot › <Jahr> › <Baustelle> vorläufige Rechnung
+  var basis; try { basis = DriveApp.getFolderById(APP.rechnungsOrdnerId); } catch (x) { basis = ordner_(ordner_(DriveApp.getRootFolder(), APP.ordner), 'Abrechnungen'); }
+  var ziel = ordner_(ordner_(basis, a.bis.slice(0, 4)), (a.baustelle.name + ' vorläufige Rechnung').replace(/[\\\/]/g, '-'));
+  // ältere Fassung mit gleichem Namen löschen (keine doppelten Dateien)
+  var alt = ziel.getFilesByName(titel); while (alt.hasNext()) alt.next().setTrashed(true);
   var f = DriveApp.getFileById(ss.getId()); f.moveTo(ziel);
-  return { url: ss.getUrl() };
+  return { url: ss.getUrl(), ordner: ziel.getUrl() };
 }
