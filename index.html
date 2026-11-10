@@ -136,6 +136,8 @@
   .kiReihe .zw .de{font-size:.72rem}
   .lblZeile{display:flex;justify-content:space-between;align-items:flex-end}
   .mikro{padding:7px 12px;border-radius:99px;background:#fff;border:1px solid #cfd5dc;font-weight:700;font-size:.85rem;margin-top:8px}
+  .tag.uu{background:#eceff3;color:#556}
+  .p-grau{background:#eceff3;color:#556}
   .mlTab{background:#fff;border-radius:12px;padding:4px 8px;font-size:.88rem}
   .mlZ{display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid #eef0f3}
   .mlZ.leer2{opacity:.4}
@@ -225,7 +227,7 @@ var TX = {
   nachher:['Malzeme ve km ekle','Material & km ergänzen'], nichtJetzt:['Şimdi değil','Nicht jetzt'],
   sicherLoeschen:['Bu kayıt silinsin mi?','Eintrag wirklich löschen?'], tagLaeuft:['Çalışma devam ediyor','Arbeit läuft noch'],
   pauseBisher:['Mola','Pause'], navi:['Yol tarifi','Navigation'], offenTage:['Kapatılmamış gün','Offene Tage'],
-  sprechen:['Konuş','Sprechen'], mListe:['Aylık liste','Monatsliste'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
+  sprechen:['Konuş','Sprechen'], uu:['Ücretsiz izin','Unbez. Urlaub'], geldNeu:['Para aldım','Geld bekommen'], betrag:['Tutar €','Betrag €'], mListe:['Aylık liste','Monatsliste'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
   mGezahlt:['Ödenen maaş','Lohn ausgezahlt'], mVorschuss:['Avans','Vorschuss'], mRest:['Kalan','Rest'], mSchuld:['Borç','Schuld'], mGuthaben:['Alacak','Guthaben'], ergaenzen:['Düzenle','Ergänzen'], aufmass:['Ölçü','Aufmaß'],
   amTippen:['Daireyi noktaya getir, ＋ bas','Kreis auf den Punkt richten und ＋ drücken'], amSuchen:['Telefonu yavaşça sağa sola hareket ettirin…','Handy langsam hin und her bewegen – Kamera nicht abdecken'], amPunkt:['Nokta','Punkt setzen'],
   amUebernehmen:['Kaydet','Übernehmen'], amNeu:['Yeni çizgi','Neue Linie'], amZurueck:['Geri','Zurück'], amGesamt:['Toplam','Gesamt'], foto:['Fotoğraf','Foto'], beleg:['Fiş / Fatura','Beleg'], stopp:['Bitir','Fertig'],
@@ -568,7 +570,7 @@ function eintragsListe(liste, datum, m){
   if(!liste.length) h+='<div class="leer">'+L('kein')+'</div>';
   liste.forEach(function(e){
     var darf = !m.gesperrt || S.nutzer.rolle==='admin';
-    if(e.typ!=='A'){ h+=swAuf(e,darf)+'<button class="eintrag" '+(darf?'onclick="eintragForm(\''+e.id+'\')"':'')+'><span class="pill '+(e.typ==='U'?'p-blau':'p-rot')+'">'+(e.typ==='U'?'🏖 '+Lt('urlaub'):'🤒 '+Lt('krank'))+'</span></button>'+swZu(); return; }
+    if(e.typ!=='A'){ h+=swAuf(e,darf)+'<button class="eintrag" '+(darf?'onclick="eintragForm(\''+e.id+'\')"':'')+'><span class="pill '+(e.typ==='U'?'p-blau':e.typ==='UU'?'p-grau':'p-rot')+'">'+(e.typ==='U'?'🏖 '+Lt('urlaub'):e.typ==='UU'?'⏸ '+Lt('uu'):'🤒 '+Lt('krank'))+'</span></button>'+swZu(); return; }
     var laeuft=!e.ende;
     h+=swAuf(e,darf)+'<button class="eintrag" '+(darf?'onclick="eintragForm(\''+e.id+'\')"':'')+'><div class="k"><span class="bsn">'+esc(bsName(e.baustelle))+'</span><span class="std">'+(laeuft?'<span class="pill p-gelb">● '+e.start+'</span>':fStd(std(e))+' '+Lt('stdKurz').split(' / ').pop())+'</span></div>'+
       '<div class="info">'+e.start+' – '+(e.ende||'…')+(e.pause?' · '+Lt('pauseBisher').split(' / ').pop()+' '+e.pause+' Min.':'')+(e.km!==''&&e.km!=null&&+e.km>0?' · '+e.km+' km':'')+((e.belege||[]).length?' · 🧾 '+e.belege.length:'')+'</div>'+
@@ -650,12 +652,13 @@ function zeigeKalender(){
   for(var t=1;t<=tage;t++){
     var iso=mo+'-'+zwei(t), dt=new Date(j,m-1,t), we=dt.getDay()===0||dt.getDay()===6, ft=feiertag(iso);
     var es=d.eintraege.filter(function(e){return e.datum===iso;});
-    var u=es.some(function(e){return e.typ==='U';}), k=es.some(function(e){return e.typ==='K';});
+    var u=es.some(function(e){return e.typ==='U';}), k=es.some(function(e){return e.typ==='K';}), uu=es.some(function(e){return e.typ==='UU';});
     var stunden=es.reduce(function(s,e){return s+std(e);},0), arbeit=es.some(function(e){return e.typ==='A';});
     var zu=d.abgeschlossen.indexOf(iso)>=0;
     var kl=['tag']; var unten='';
     if(u){ kl.push('urlaub'); unten=tr()?'İzin':'Urlaub'; }
     else if(k){ kl.push('krank'); unten=tr()?'Hasta':'Krank'; }
+    else if(uu){ kl.push('uu'); unten=tr()?'Ücr.siz':'Unbez.'; }
     else if(arbeit){ kl.push(zu?'zu':'arbeit'); unten=(stunden?fStd(stunden):'…')+(zu?' ✓':''); }
     else if(ft){ kl.push('ft'); unten=tr()?'Tatil':'Feiertag'; }
     else if(we) kl.push('we');
@@ -665,7 +668,7 @@ function zeigeKalender(){
     h+='<button class="'+kl.join(' ')+'" onclick="tagDetail(\''+iso+'\')"><span class="n">'+t+'</span><span class="h">'+esc(unten)+'</span></button>';
   }
   h+='</div></div>';
-  var s=d.eintraege.reduce(function(a,e){ if(e.typ==='U')a.u++; else if(e.typ==='K')a.k++; else {a.h+=std(e); a.t[e.datum]=1;} return a; },{h:0,u:0,k:0,t:{}});
+  var s=d.eintraege.reduce(function(a,e){ if(e.typ==='U')a.u++; else if(e.typ==='K')a.k++; else if(e.typ==='UU'){} else {a.h+=std(e); a.t[e.datum]=1;} return a; },{h:0,u:0,k:0,t:{}});
   h+='<div class="summe"><div class="kachel"><div class="w">'+fStd(s.h)+'</div><div class="l">'+Lt('gesamt')+'</div></div><div class="kachel"><div class="w">'+Object.keys(s.t).length+'</div><div class="l">'+Lt('tage')+'</div></div>'+
      '<div class="kachel"><div class="w">'+s.u+'</div><div class="l">'+Lt('urlaub')+(d.urlaubKonto&&d.urlaubKonto.anspruch?'<br><b style="color:var(--blau)">'+(tr()?'Kalan ':'Rest ')+d.urlaubKonto.rest+' / '+d.urlaubKonto.anspruch+'</b>':'')+'</div></div><div class="kachel"><div class="w">'+s.k+'</div><div class="l">'+Lt('krank')+'</div></div></div>';
   if(d.gesperrt) h+='<div class="hinweis">🔒 '+Lt('gesperrt')+'</div>';
@@ -729,7 +732,7 @@ function eintragForm(id, datum){
 }
 function zeichneForm(){
   var e=F, h='<h2>'+L(e.id?'eintragBearb':'eintragNeu')+'</h2>';
-  h+='<div class="seg">'+['A','U','K'].map(function(t){ return '<button class="'+(e.typ===t?'an':'')+'" onclick="formLesen();F.typ=\''+t+'\';zeichneForm()">'+L(t==='A'?'arbeit':t==='U'?'urlaub':'krank')+'</button>'; }).join('')+'</div>';
+  h+='<div class="seg">'+['A','U','K','UU'].map(function(t){ return '<button class="'+(e.typ===t?'an':'')+'" onclick="formLesen();F.typ=\''+t+'\';zeichneForm()">'+L(t==='A'?'arbeit':t==='U'?'urlaub':t==='K'?'krank':'uu')+'</button>'; }).join('')+'</div>';
   h+='<label class="f">'+L('datum','inl')+'</label><input type="date" class="eing" id="fDatum" value="'+e.datum+'">';
   if(e.typ==='A'){
     var laeuft = e.id && !e.ende && S.laufend && S.laufend.id===e.id;
@@ -991,7 +994,7 @@ function bildKlein(datei, max){
 }
 
 function abwesenheitForm(){
-  var h='<h2>'+L('abwesend')+'</h2><div class="seg" id="abwTyp"><button class="an" data-t="U" onclick="abwTyp(this)">🏖 '+L('urlaub')+'</button><button data-t="K" onclick="abwTyp(this)">🤒 '+L('krank')+'</button></div>'+
+  var h='<h2>'+L('abwesend')+'</h2><div class="seg" id="abwTyp"><button class="an" data-t="U" onclick="abwTyp(this)">🏖 '+L('urlaub')+'</button><button data-t="K" onclick="abwTyp(this)">🤒 '+L('krank')+'</button><button data-t="UU" onclick="abwTyp(this)">⏸ '+L('uu')+'</button></div>'+
     '<div class="reihe"><div><label class="f">'+L('von','inl')+'</label><input type="date" class="eing" id="aVon" value="'+heuteIso()+'"></div><div><label class="f">'+L('bis','inl')+'</label><input type="date" class="eing" id="aBis" value="'+heuteIso()+'"></div></div>'+
     '<p class="klein">'+(tr()?'Hafta sonu ve resmi tatiller otomatik atlanır.<br>':'')+'Wochenenden und Feiertage werden automatisch übersprungen.</p>'+
     '<div id="fFehler"></div><button class="gross b-blau" onclick="abwSpeichern()">💾 '+L('speichern')+'</button><div style="height:8px"></div><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>';
@@ -1151,7 +1154,7 @@ function mlZeigen(r){
   var neg=r.rest!=null&&r.rest<0;
   h+='<div class="karte" style="margin-top:10px">'+
     '<div class="zeileL"><span>'+L('mStd')+'</span><b>'+String(r.summe.bezahlt).replace('.',',')+' h</b></div>'+
-    '<div class="klein" style="margin:-4px 0 6px">Arbeit '+String(r.summe.arbeit).replace('.',',')+' h · Krank '+r.summe.krank+' · Urlaub '+r.summe.urlaub+' · Feiertag '+r.summe.feiertag+' (je 8 h)</div>'+
+    '<div class="klein" style="margin:-4px 0 6px">Arbeit '+String(r.summe.arbeit).replace('.',',')+' h · Krank '+r.summe.krank+' · Urlaub '+r.summe.urlaub+' · Feiertag '+r.summe.feiertag+' (je 8 h)'+(r.summe.unbezahlt?' · Unbez. '+r.summe.unbezahlt:'')+'</div>'+
     (r.satz?'<div class="zeileL"><span>'+L('mLohn')+' ('+String(r.satz).replace('.',',')+' €/h)</span><b>'+eur2(r.lohn)+'</b></div>':'')+
     (r.vortrag!=null?'<div class="zeileL"><span>'+L('mVortrag')+'</span><b>'+eur2(r.vortrag)+'</b></div>':'')+
     (r.gezahltLohn?'<div class="zeileL"><span>− '+L('mGezahlt')+'</span><b>'+eur2(r.gezahltLohn)+'</b></div>':'')+
@@ -1159,6 +1162,11 @@ function mlZeigen(r){
     (r.sonstiges?'<div class="zeileL"><span>− Sonstiges</span><b>'+eur2(r.sonstiges)+'</b></div>':'')+
     (r.rest!=null?'<div class="zeileL" style="font-size:1.15rem"><span>'+L('mRest')+'</span><b style="color:'+(neg?'var(--rot)':'var(--gruen)')+'">'+eur2(r.rest)+'</b></div><div class="klein" style="text-align:right">'+(neg?Lt('mSchuld'):Lt('mGuthaben'))+'</div>':'')+
     '<div class="klein" style="margin-top:6px">🏖 '+Lt('urlaub')+' '+r.urlaub.jahr+': '+r.urlaub.anspruch+' · '+(tr()?'alındı':'genommen')+' '+r.urlaub.genommen+' · Rest '+r.urlaub.rest+'</div></div>';
+  if(!adm){
+    h+='<div class="karte"><p class="titel">💶 '+L('geldNeu')+'</p><div class="reihe"><div><label class="f">'+L('datum','inl')+'</label><input type="date" class="eing" id="zDat" value="'+heuteIso()+'"></div><div><label class="f">'+L('betrag','inl')+'</label><input class="eing" id="zBet" inputmode="decimal" placeholder="10"></div></div>'+
+      '<div style="height:8px"></div><button class="gross b-navy" onclick="zahlungNeu(\''+r.ma+'\')">💾 '+L('speichern')+'</button>'+
+      '<p class="klein">'+(tr()?'Patron bilgilendirilir. Düzeltme sadece patron yapabilir.<br>':'')+'Der Chef bekommt eine Nachricht. Ändern kann nur der Chef.</p></div>';
+  }
   if(adm){
     h+='<div class="karte"><p class="titel">💶 Vorschuss / Lohn eintragen</p><div class="reihe"><div><label class="f">Datum</label><input type="date" class="eing" id="zDat" value="'+(r.monat===monatVon(heuteIso())?heuteIso():r.monat+'-28')+'"></div><div><label class="f">Betrag €</label><input class="eing" id="zBet" inputmode="decimal"></div></div>'+
       '<label class="f">Art</label><select class="eing" id="zArt"><option value="vorschuss">Vorschuss</option><option value="lohn">Lohn ausgezahlt</option><option value="sonstiges">Sonstiges</option></select>'+
@@ -1171,7 +1179,7 @@ function mlZeigen(r){
   oeffneBlatt(h);
 }
 function zahlungNeu(ma){
-  var z={ma:ma, datum:$('zDat').value, art:$('zArt').value, betrag:$('zBet').value, notiz:$('zNot').value};
+  var z={ma:ma, datum:$('zDat').value, art:$('zArt')?$('zArt').value:'vorschuss', betrag:$('zBet').value, notiz:$('zNot')?$('zNot').value:''};
   if(!z.betrag) return toast('Betrag fehlt');
   rufe('zahlungSpeichern',{zahlung:z}).then(function(r){ mlZeigen(r); toast('✓ gespeichert'); }).catch(function(f){ toast(fehlerText(f)); });
 }

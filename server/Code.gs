@@ -105,7 +105,7 @@ var AKTIONEN = {
   abrechnungTabelle: { admin: true, fn: function (ich, d) { return abrechnungTabelle_(d); } },
   baustelleNeu:   { fn: function (ich, d) { return baustelleNeu_(ich, d); } },
   lohnliste:      { fn: function (ich, d) { return lohnliste_(ich, d); } },
-  zahlungSpeichern:{ admin: true, fn: function (ich, d) { return zahlungSpeichern_(ich, d); } },
+  zahlungSpeichern:{ fn: function (ich, d) { return zahlungSpeichern_(ich, d); } },
   zahlungLoeschen:{ admin: true, fn: function (ich, d) { loeschen_(T.Z, String(d.id || '')); return lohnliste_(ich, d); } },
   lohnlisteDateien:{ admin: true, fn: function (ich, d) { return lohnlisteDateien_(ich, d); } },
   importEintraege:{ admin: true, fn: function (ich, d) { return importEintraege_(d); } },
@@ -437,7 +437,7 @@ function eintragSpeichern_(ich, d) {
   pruefeDatum_(e.datum);
   pruefeSperre_(ich, ma, e.datum);
   if (alt) pruefeSperre_(ich, ma, alt.datum);
-  var typ = ['A', 'U', 'K'].indexOf(e.typ) >= 0 ? e.typ : 'A';
+  var typ = ['A', 'U', 'K', 'UU'].indexOf(e.typ) >= 0 ? e.typ : 'A';
   if (typ === 'A') {
     if (!e.baustelle) throw new Error('BAUSTELLE_FEHLT');
     pruefeZeit_(e.start);
@@ -481,8 +481,8 @@ function eintragLoeschen_(ich, d) {
 function abwesenheit_(ich, d) {
   var ma = welcherMa_(ich, d.ma);
   pruefeDatum_(d.von); pruefeDatum_(d.bis);
-  if (['U', 'K'].indexOf(d.typ) < 0) throw new Error('Falsche Art');
-  var vorhanden = zeilen_(T.E).filter(function (e) { return e.ma === ma && (e.typ === 'U' || e.typ === 'K'); })
+  if (['U', 'K', 'UU'].indexOf(d.typ) < 0) throw new Error('Falsche Art');
+  var vorhanden = zeilen_(T.E).filter(function (e) { return e.ma === ma && (e.typ === 'U' || e.typ === 'K' || e.typ === 'UU'); })
     .map(function (e) { return e.datum; });
   var tag = new Date(d.von + 'T12:00:00'), bis = new Date(d.bis + 'T12:00:00'), n = 0;
   while (tag <= bis && n < 62) {
@@ -738,6 +738,7 @@ function summen_(liste) {
   liste.forEach(function (e) {
     if (e.typ === 'U') s.urlaub++;
     else if (e.typ === 'K') s.krank++;
+    else if (e.typ === 'UU') s.unbezahlt = (s.unbezahlt || 0) + 1;
     else { s.stunden += stunden_(e); tage[e.datum] = 1; s.km += Number(e.km || 0); }
   });
   s.arbeitstage = Object.keys(tage).length;
@@ -1105,10 +1106,15 @@ function zahlungSpeichern_(ich, d) {
   kopfPruefen_(T.Z);
   var z = d.zahlung || {};
   pruefeDatum_(z.datum);
+  if (ich.rolle !== 'admin') { // Mitarbeiter: nur eigenen Vorschuss nachtragen
+    z.ma = ich.id; z.art = 'vorschuss';
+    z.notiz = 'selbst eingetragen ' + Utilities.formatDate(new Date(), APP.zeitzone, 'dd.MM. HH:mm');
+  }
   var betrag = Number(String(z.betrag).replace(',', '.'));
   if (!betrag) throw new Error('Betrag fehlt');
   var art = ['vorschuss', 'lohn', 'sonstiges'].indexOf(z.art) >= 0 ? z.art : 'vorschuss';
   schreiben_(T.Z, { id: Utilities.getUuid().slice(0, 8), ma: String(z.ma || d.ma), datum: z.datum, art: art, betrag: betrag, notiz: String(z.notiz || '').slice(0, 120) });
+  if (ich.rolle !== 'admin') { var mm = finde_(T.MA, ich.id); pushAnAdmin_('💶 ' + ((mm && mm.name) || ich.id) + ': Geld bekommen', betrag.toFixed(2).replace('.', ',') + ' € am ' + deDatum_(z.datum)); }
   return lohnliste_(ich, { ma: z.ma || d.ma, monat: z.datum.slice(0, 7) });
 }
 
@@ -1127,6 +1133,7 @@ function monatsZeilen_(ma, mo) {
     var iso = mo + '-' + ('0' + t).slice(-2), dt = new Date(j, mm - 1, t, 12), w = dt.getDay();
     var heute = es.filter(function (e) { return e.datum === iso; }), zeilen = [];
     heute.forEach(function (e) {
+      if (e.typ === 'UU') { if (!zeilen.some(function (z) { return z.typ === 'UU'; })) { zeilen.push({ typ: 'UU', text: 'Unbez. Urlaub', std: 0 }); sum.unbezahlt = (sum.unbezahlt || 0) + 1; } return; }
       if (e.typ === 'K' || e.typ === 'U') {
         if (zeilen.some(function (z) { return z.typ === e.typ; })) return; // doppelte Abwesenheit nur einmal
         zeilen.push({ typ: e.typ, text: e.typ === 'K' ? 'Krank' : 'Urlaub', std: STD_AUSFALL });
@@ -1240,6 +1247,7 @@ function lohnlisteDateien_(ich, d) {
         km ? Math.min(km, 40) : '', km > 40 ? km - 40 : '', '=(J' + r + '*0.3)+(K' + r + '*0.38)', ziel]);
     } else {
       var txt = sonst.length ? sonst[0].text.replace(/ \(.*\)$/, '') : '';
+      if (txt === 'Unbez. Urlaub') txt = 'unb. Urlaub';
       if (txt === 'Krank') krank++; else if (txt === 'Urlaub') url++; else if (txt === 'Feiertag') fei++;
       w.push([datum, '', '', '', '', '', '', '', '', '', '', '=(J' + r + '*0.3)+(K' + r + '*0.38)', txt]);
     }
