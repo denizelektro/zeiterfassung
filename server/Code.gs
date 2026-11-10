@@ -103,7 +103,7 @@ var AKTIONEN = {
 
 /* ============================ KI (Google Gemini) ============================ */
 
-var KI_MODELLE = ['gemini-flash-latest', 'gemini-2.5-flash'];
+var KI_MODELLE = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite'];
 var KI_EINHEITEN = 'Stk, m, Pkt, Rolle, kg, Sack';
 
 function kiSchluessel_(d) {
@@ -114,7 +114,8 @@ function kiSchluessel_(d) {
   var alt = props.getProperty('KI_KEY');
   props.setProperty('KI_KEY', k);
   try { kiFrage_([{ text: 'Antworte nur mit {"ok":true}' }]); }
-  catch (x) { if (alt) props.setProperty('KI_KEY', alt); else props.deleteProperty('KI_KEY'); throw new Error('Schlüssel funktioniert nicht: ' + x.message); }
+  catch (x) { if (x.message === 'KI_BESETZT' || x.message === 'KI_LIMIT') return { kiAktiv: true };
+    if (alt) props.setProperty('KI_KEY', alt); else props.deleteProperty('KI_KEY'); throw new Error('Schlüssel funktioniert nicht: ' + x.message); }
   return { kiAktiv: true };
 }
 function kiAktiv_() { return !!PropertiesService.getScriptProperties().getProperty('KI_KEY'); }
@@ -139,9 +140,12 @@ function kiFrage_(teile) {
       return JSON.parse(t || '{}');
     }
     letzter = code + ' ' + txt.slice(0, 200);
-    if (code === 429) throw new Error('KI_LIMIT');
-    if (code !== 404 && code !== 400) break;
+    if (code === 401 || code === 403 || /API_KEY_INVALID|API key not valid/i.test(txt)) throw new Error('KI_SCHLUESSEL: ' + letzter);
+    if (code >= 500 && !i) Utilities.sleep(800);
+    // 404 (Modell gibt es nicht), 429 (Limit), 5xx (überlastet) → nächstes Modell versuchen
   }
+  if (/^429/.test(letzter)) throw new Error('KI_LIMIT');
+  if (/^5\d\d/.test(letzter)) throw new Error('KI_BESETZT');
   throw new Error('KI: ' + letzter);
 }
 function kiDatei_(d, art) {
