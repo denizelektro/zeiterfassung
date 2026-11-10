@@ -138,6 +138,7 @@
   .mikro{padding:7px 12px;border-radius:99px;background:#fff;border:1px solid #cfd5dc;font-weight:700;font-size:.85rem;margin-top:8px}
   .tag.uu{background:#eceff3;color:#556}
   .p-grau{background:#eceff3;color:#556}
+  .reiseK .reiseZeit{font-size:1.6rem;font-weight:800;color:var(--navy)}
   .mlTab{background:#fff;border-radius:12px;padding:4px 8px;font-size:.88rem}
   .mlZ{display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid #eef0f3}
   .mlZ.leer2{opacity:.4}
@@ -227,7 +228,9 @@ var TX = {
   nachher:['Malzeme ve km ekle','Material & km ergänzen'], nichtJetzt:['Şimdi değil','Nicht jetzt'],
   sicherLoeschen:['Bu kayıt silinsin mi?','Eintrag wirklich löschen?'], tagLaeuft:['Çalışma devam ediyor','Arbeit läuft noch'],
   pauseBisher:['Mola','Pause'], navi:['Yol tarifi','Navigation'], offenTage:['Kapatılmamış gün','Offene Tage'],
-  sprechen:['Konuş','Sprechen'], uu:['Ücretsiz izin','Unbez. Urlaub'], geldNeu:['Para aldım','Geld bekommen'], betrag:['Tutar €','Betrag €'], mListe:['Aylık liste','Monatsliste'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
+  sprechen:['Konuş','Sprechen'], reise:['Yol','Reise'], reiseLang:['Kendi arabamla','Fahrt mit eigenem Auto'],
+  abfahrt:['Evden çıkış','Abfahrt von zu Hause'], ankunft:['Eve varış','Ankunft zu Hause'], kmGes:['Toplam km (gidiş + dönüş)','Kilometer gesamt (hin + zurück)'],
+  uebern:['Konaklama (eve dönmedim)','Übernachtung (nicht nach Hause)'], jetzt:['şimdi','jetzt'], uu:['Ücretsiz izin','Unbez. Urlaub'], geldNeu:['Para aldım','Geld bekommen'], betrag:['Tutar €','Betrag €'], mListe:['Aylık liste','Monatsliste'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
   mGezahlt:['Ödenen maaş','Lohn ausgezahlt'], mVorschuss:['Avans','Vorschuss'], mRest:['Kalan','Rest'], mSchuld:['Borç','Schuld'], mGuthaben:['Alacak','Guthaben'], ergaenzen:['Düzenle','Ergänzen'], aufmass:['Ölçü','Aufmaß'],
   amTippen:['Daireyi noktaya getir, ＋ bas','Kreis auf den Punkt richten und ＋ drücken'], amSuchen:['Telefonu yavaşça sağa sola hareket ettirin…','Handy langsam hin und her bewegen – Kamera nicht abdecken'], amPunkt:['Nokta','Punkt setzen'],
   amUebernehmen:['Kaydet','Übernehmen'], amNeu:['Yeni çizgi','Neue Linie'], amZurueck:['Geri','Zurück'], amGesamt:['Toplam','Gesamt'], foto:['Fotoğraf','Foto'], beleg:['Fiş / Fatura','Beleg'], stopp:['Bitir','Fertig'],
@@ -413,12 +416,12 @@ function render(){
   if(!S.nutzer) return;
   zeigeOffline();
   var admin = S.nutzer.rolle==='admin';
-  var kopfTitel = S.ansicht==='heute' ? L('heute') : S.ansicht==='kalender' ? L('kalender') : S.ansicht==='nachrichten' ? L('nachrichten') : 'Verwaltung';
+  var kopfTitel = S.ansicht==='heute' ? L('heute') : S.ansicht==='reise' ? L('reiseLang') : S.ansicht==='kalender' ? L('kalender') : S.ansicht==='nachrichten' ? L('nachrichten') : 'Verwaltung';
   var html = '<header class="kopf"><div class="zeile"><h1>'+kopfTitel+'</h1><button class="ikon" onclick="menue()" aria-label="Menü">☰</button></div>'+
     '<div class="sub">'+esc(S.nutzer.name)+'</div></header><main id="inhalt"></main>'+
-    '<nav class="unten">'+navKnopf('heute','🕒')+navKnopf('kalender','📅')+navKnopf('nachrichten','💬')+(admin?navKnopf('verwaltung','⚙️'):'')+'</nav>';
+    '<nav class="unten">'+navKnopf('heute','🕒')+navKnopf('kalender','📅')+navKnopf('reise','🚗')+navKnopf('nachrichten','💬')+(admin?navKnopf('verwaltung','⚙️'):'')+'</nav>';
   $('app').innerHTML = html;
-  if(S.ansicht==='heute') zeigeHeute(); else if(S.ansicht==='kalender') zeigeKalender(); else if(S.ansicht==='nachrichten') zeigeNachrichten(); else zeigeVerwaltung();
+  if(S.ansicht==='heute') zeigeHeute(); else if(S.ansicht==='reise') zeigeHeute(true); else if(S.ansicht==='kalender') zeigeKalender(); else if(S.ansicht==='nachrichten') zeigeNachrichten(); else zeigeVerwaltung();
 }
 function navKnopf(id, ikon){ return '<button class="'+(S.ansicht===id?'an':'')+'" onclick="gehe(\''+id+'\')"><span class="i">'+ikon+(id==='nachrichten'&&S.ungelesen?'<span class="badge">'+S.ungelesen+'</span>':'')+'</span>'+(id==='verwaltung'?'<span>Verwaltung</span>':L(id))+'</button>'; }
 function gehe(id){ S.ansicht=id; if(id==='kalender'){ S.kalMonat = S.kalMonat||monatVon(heuteIso()); } render(); window.scrollTo(0,0); }
@@ -432,10 +435,15 @@ function abmelden(){ rufe('abmelden',{}).catch(function(){}).then(abmeldenLokal)
 /* ======================= HEUTE ======================= */
 function bsAdresse(id){ var b=(S.alleBaustellen.length?S.alleBaustellen:S.baustellen).filter(function(x){return x.id===id;})[0]; return b?b.adresse:''; }
 function bsName(id){ var b=(S.alleBaustellen.length?S.alleBaustellen:S.baustellen).filter(function(x){return x.id===id;})[0] || S.baustellen.filter(function(x){return x.id===id;})[0]; return b?b.name:'—'; }
-function zeigeHeute(){
+function zeigeHeute(reise){
   var heute=heuteIso(), m=monatDaten(S.nutzer.id, monatVon(heute)) || {eintraege:[],abgeschlossen:[]};
   var l=S.laufend, h='';
   h+='<div class="karte" style="padding-bottom:6px"><div style="font-size:1.1rem">'+datumText(heute)+'</div></div>';
+  var heuteA = m.eintraege.filter(function(e){ return e.datum===heute && e.typ==='A'; });
+  var R = reiseStand(heuteA);
+  if(reise) h+='<div class="karte reiseK"><p class="titel">🚗 '+L('abfahrt')+'</p>'+(R.abfahrt
+      ? '<div class="reiseZeit">'+R.abfahrt+' <button class="link" onclick="abfahrtAendern()">✏️</button></div>'
+      : '<button class="gross b-navy" onclick="abfahrtJetzt()">🚗 '+L('abfahrt')+' – '+Lt('jetzt').split(' / ').pop()+'</button>')+'</div>';
   if(m.gesperrt) h+='<div class="hinweis">'+Lt('gesperrt')+'</div>';
   h+='<div class="karte" id="stempel">';
   if(!l){
@@ -459,13 +467,53 @@ function zeigeHeute(){
     h+='<button class="gross b-rot" onclick="stempel(\'ende\')">■ '+L('feierabend')+'</button>';
   }
   h+='</div>';
+  if(reise){
+    h+='<div class="karte reiseK"><p class="titel">🏠 '+L('ankunft')+'</p>'+(R.ankunft
+      ? '<div class="reiseZeit">'+R.ankunft+(R.km!==''?' · '+R.km+' km':'')+(R.uebern?' · 🛏':'')+' <button class="link" onclick="reiseForm()">✏️</button></div>'
+      : '<button class="gross b-blau" onclick="reiseForm()">🏠 '+L('ankunft')+'</button>')+
+      '<p class="klein">'+(tr()?'Sadece kendi arabanla tek başına gittiğinde kullan.<br>':'')+'Nur nutzen, wenn du allein mit deinem eigenen Auto fährst.</p></div>';
+  }
   var heuteE = m.eintraege.filter(function(e){ return e.datum===heute; });
   h+='<div class="karte"><p class="titel">'+L('heuteGearbeitet')+'</p>'+eintragsListe(heuteE, heute, m)+'</div>';
   $('inhalt').innerHTML=h;
   clearInterval(S.uhrTimer);
   if(l) S.uhrTimer=setInterval(function(){ var u=$('uhr'); if(u) u.textContent=laufzeit(S.laufend||l); }, 15000);
   swipeAktivieren($('inhalt'));
-  wischen($('inhalt'), function(r){ if(r<0 && !wischen.sperre) gehe('kalender'); });
+  if(!reise) wischen($('inhalt'), function(r){ if(r<0 && !wischen.sperre) gehe('kalender'); });
+}
+/* ---------- Reise: Abfahrt / Ankunft / km ---------- */
+function reiseStand(heuteA){
+  var r={abfahrt:'',ankunft:'',km:'',uebern:false};
+  heuteA.forEach(function(e){ if(e.abfahrt&&!r.abfahrt) r.abfahrt=e.abfahrt; if(e.ankunft) r.ankunft=e.ankunft; if(e.km!==''&&e.km!=null&&r.km==='') r.km=e.km; if(e.uebern) r.uebern=true; });
+  try{ var x=JSON.parse(LS.getItem('ze_reise')||'null'); if(x&&x.datum===heuteIso()&&!r.abfahrt) r.abfahrt=x.abfahrt; }catch(e){}
+  return r;
+}
+function abfahrtJetzt(){ LS.setItem('ze_reise',JSON.stringify({datum:heuteIso(), abfahrt:jetztZeit()})); toast('✓ '+jetztZeit()); render(); }
+function abfahrtAendern(){
+  var R=reiseStand([]), alt=R.abfahrt;
+  var heuteA=(monatDaten(S.nutzer.id, monatVon(heuteIso()))||{eintraege:[]}).eintraege.filter(function(e){return e.datum===heuteIso()&&e.typ==='A';});
+  if(heuteA.length) return reiseForm();
+  oeffneBlatt('<h2>🚗 '+L('abfahrt')+'</h2><input type="time" class="eing" id="rAbf" value="'+(alt||jetztZeit())+'"><div style="height:10px"></div>'+
+    '<button class="gross b-navy" onclick="LS.setItem(\'ze_reise\',JSON.stringify({datum:heuteIso(),abfahrt:$(\'rAbf\').value}));schliesseBlatt();render()">💾 '+L('speichern')+'</button>');
+}
+function reiseForm(datum){
+  datum=datum||heuteIso();
+  var heuteA=(monatDaten(S.nutzer.id, monatVon(datum))||{eintraege:[]}).eintraege.filter(function(e){return e.datum===datum&&e.typ==='A';});
+  if(!heuteA.length) return toast((tr()?'Önce işe başla / ':'')+'Erst „Arbeit beginnen“ buchen');
+  if(S.laufend && S.laufend.datum===datum) return toast((tr()?'Önce „İş bitti“ / ':'')+'Erst Feierabend buchen');
+  var R=reiseStand(heuteA);
+  oeffneBlatt('<h2>🏠 '+L('ankunft')+'</h2>'+
+    '<div class="reihe"><div><label class="f">'+L('abfahrt','inl')+'</label><input type="time" class="eing" id="rAbf" value="'+(R.abfahrt||'')+'"></div>'+
+    '<div><label class="f">'+L('ankunft','inl')+'</label><input type="time" class="eing" id="rAnk" value="'+(R.ankunft||jetztZeit())+'"></div></div>'+
+    '<label class="f">'+L('kmGes','inl')+'</label><input type="number" inputmode="decimal" class="eing" id="rKm" value="'+(R.km===''?'':R.km)+'" placeholder="z. B. 212">'+
+    '<label class="f" style="display:flex;align-items:center;gap:10px;margin-top:12px"><input type="checkbox" id="rUeb" '+(R.uebern?'checked':'')+' style="width:22px;height:22px"> '+L('uebern','inl')+'</label>'+
+    '<p class="klein">'+(tr()?'İlk 20 km (her yön) 0,30 €, sonrası 0,38 € – uygulama hesaplar.<br>':'')+'Je Strecke die ersten 20 km × 0,30 €, darüber × 0,38 € – rechnet die App aus.</p>'+
+    '<div id="fFehler"></div><button class="gross b-navy" onclick="reiseSpeichern(\''+datum+'\')">💾 '+L('speichern')+'</button>');
+}
+function reiseSpeichern(datum){
+  rufe('reiseSpeichern',{datum:datum, ma:S.nutzer.id, abfahrt:$('rAbf').value, ankunft:$('rAnk').value, km:$('rKm').value, uebern:$('rUeb').checked})
+    .then(function(m){ monatSetzen(m); LS.removeItem('ze_reise'); schliesseBlatt(); toast('✓'); render(); })
+    .catch(function(f){ fFehler(fehlerText(f)); });
 }
 function laufzeit(l){ if(!l) return ''; var j=jetztZeit(), sameDay=l.datum===heuteIso(); var min = sameDay ? minDiff(l.start, l.pauseStart||j) - l.pause : 0; min=Math.max(0,min); return Math.floor(min/60)+':'+zwei(min%60); }
 function bsListe(fn){
@@ -1226,7 +1274,7 @@ function ladeNachrichten(){
   return rufe('meldungen',{}).then(function(d){ S.nachr=d.liste; S.ungelesen=d.ungelesen; if(S.ansicht==='nachrichten') listeNachrichten(); badgeAktualisieren(); })
     .catch(function(f){ var el=$('nliste'); if(el) el.innerHTML='<div class="leer">'+esc(fehlerText(f))+'</div>'; });
 }
-function badgeAktualisieren(){ var b=document.querySelector('nav.unten'); if(!b) return; var alt=S.ansicht; b.outerHTML='<nav class="unten">'+navKnopf('heute','🕒')+navKnopf('kalender','📅')+navKnopf('nachrichten','💬')+(S.nutzer.rolle==='admin'?navKnopf('verwaltung','⚙️'):'')+'</nav>'; }
+function badgeAktualisieren(){ var b=document.querySelector('nav.unten'); if(!b) return; var alt=S.ansicht; b.outerHTML='<nav class="unten">'+navKnopf('heute','🕒')+navKnopf('kalender','📅')+navKnopf('reise','🚗')+navKnopf('nachrichten','💬')+(S.nutzer.rolle==='admin'?navKnopf('verwaltung','⚙️'):'')+'</nav>'; }
 function listeNachrichten(){
   var el=$('nliste'); if(!el) return; var l=S.nachr||[];
   if(!l.length){ el.innerHTML='<div class="leer">'+L('keineNachr')+'</div>'; return; }

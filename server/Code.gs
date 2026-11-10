@@ -22,7 +22,7 @@ var T = {
   Z:   { name: 'Zahlungen',   kopf: ['id', 'ma', 'datum', 'art', 'betrag', 'notiz'] },
   ME:  { name: 'Nachrichten', kopf: ['id', 'von', 'an', 'zeit', 'baustelle', 'art', 'text', 'gelesen'] },
   BS:  { name: 'Baustellen',  kopf: ['id', 'name', 'adresse', 'aktiv', 'erstellt', 'fuer'] },
-  E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert', 'belege'] },
+  E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert', 'belege', 'abfahrt', 'ankunft', 'uebern'] },
   TAG: { name: 'Abschluesse', kopf: ['ma', 'datum', 'zeit'] },
   SP:  { name: 'Monatssperren', kopf: ['ma', 'monat', 'zeit', 'tabelleId', 'pdfId'] }
 };
@@ -104,6 +104,7 @@ var AKTIONEN = {
   abrechnung:     { admin: true, fn: function (ich, d) { return abrechnung_(d); } },
   abrechnungTabelle: { admin: true, fn: function (ich, d) { return abrechnungTabelle_(d); } },
   baustelleNeu:   { fn: function (ich, d) { return baustelleNeu_(ich, d); } },
+  reiseSpeichern: { fn: function (ich, d) { return reiseSpeichern_(ich, d); } },
   lohnliste:      { fn: function (ich, d) { return lohnliste_(ich, d); } },
   zahlungSpeichern:{ fn: function (ich, d) { return zahlungSpeichern_(ich, d); } },
   zahlungLoeschen:{ admin: true, fn: function (ich, d) { loeschen_(T.Z, String(d.id || '')); return lohnliste_(ich, d); } },
@@ -380,7 +381,8 @@ function eintragAus_(e) {
     id: e.id, ma: e.ma, datum: e.datum, typ: e.typ || 'A', baustelle: e.baustelle,
     start: e.start, ende: e.ende, pause: Number(e.pause || 0), pauseStart: e.pauseStart || '',
     taetigkeit: e.taetigkeit, material: m, km: e.km === '' ? '' : Number(e.km || 0),
-    belege: belegeLesen_(e.belege)
+    belege: belegeLesen_(e.belege),
+    abfahrt: e.abfahrt || '', ankunft: e.ankunft || '', uebern: e.uebern === 'ja'
   };
 }
 
@@ -462,7 +464,10 @@ function eintragSpeichern_(ich, d) {
     material: JSON.stringify(material),
     km: e.km === '' || e.km == null ? '' : Math.max(0, Number(e.km) || 0),
     geaendert: jetzt_(),
-    belege: belege.length ? JSON.stringify(belege) : ''
+    belege: belege.length ? JSON.stringify(belege) : '',
+    abfahrt: typ === 'A' && /^\d{2}:\d{2}$/.test(String(e.abfahrt || '')) ? e.abfahrt : '',
+    ankunft: typ === 'A' && /^\d{2}:\d{2}$/.test(String(e.ankunft || '')) ? e.ankunft : '',
+    uebern: typ === 'A' && e.uebern ? 'ja' : ''
   };
   if (alt) aktualisieren_(T.E, obj.id, obj); else { schreiben_(T.E, obj); if (typ === 'A') tagWiederOeffnen_(ma, e.datum); }
   return monat_(ich, { ma: ma, monat: e.datum.slice(0, 7) });
@@ -875,7 +880,7 @@ function pushSenden_(maId, titel, text, prio) {
 function wert_(v, k) {
   if (v === null || v === undefined) return '';
   if (Object.prototype.toString.call(v) === '[object Date]') {
-    if (k === 'start' || k === 'ende' || k === 'pauseStart') return Utilities.formatDate(v, APP.zeitzone, 'HH:mm');
+    if (k === 'start' || k === 'ende' || k === 'pauseStart' || k === 'abfahrt' || k === 'ankunft') return Utilities.formatDate(v, APP.zeitzone, 'HH:mm');
     if (k === 'datum') return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM-dd');
     if (k === 'monat' || k === 'saldoMonat') return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM');
     return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM-dd HH:mm:ss');
@@ -1140,7 +1145,7 @@ function monatsZeilen_(ma, mo) {
         sum[e.typ === 'K' ? 'krank' : 'urlaub']++; sum.bezahlt += STD_AUSFALL;
       } else {
         var h = stunden_(e), b = bsN[e.baustelle] || {};
-        zeilen.push({ typ: 'A', text: b.name || '?', adresse: b.adresse || '', start: e.start, ende: e.ende || '', pause: Number(e.pause || 0), std: Math.round(h * 100) / 100, km: Number(e.km || 0), taetigkeit: e.taetigkeit || '' });
+        zeilen.push({ typ: 'A', text: b.name || '?', adresse: b.adresse || '', start: e.start, ende: e.ende || '', pause: Number(e.pause || 0), std: Math.round(h * 100) / 100, km: Number(e.km || 0), taetigkeit: e.taetigkeit || '', abfahrt: e.abfahrt || '', ankunft: e.ankunft || '', uebern: !!e.uebern });
         sum.arbeit += h; sum.bezahlt += h; sum.km += Number(e.km || 0);
       }
     });
@@ -1241,10 +1246,12 @@ function lohnlisteDateien_(ich, d) {
       // Lücken zwischen mehreren Baustellen als Pause zählen, damit die Stunden stimmen
       for (var i = 1; i < arbeit.length; i++) if (arbeit[i - 1].ende && arbeit[i].start) pause += Math.max(0, minDiff_(arbeit[i - 1].ende, arbeit[i].start));
       var km = arbeit.reduce(function (a, x) { return a + (x.km || 0); }, 0);
+      var abf = arbeit.map(function (x) { return x.abfahrt; }).filter(String)[0] || '', ank = arbeit.map(function (x) { return x.ankunft; }).filter(String).pop() || '';
+      var ueb = arbeit.some(function (x) { return x.uebern; });
       var ziel = arbeit.map(function (x) { return 'Baustelle ' + x.text + (x.adresse ? ' ' + x.adresse : ''); }).filter(function (v, k, a) { return a.indexOf(v) === k; }).join(' / ');
-      w.push([datum, '', '', '=IF(OR(B' + r + '="", C' + r + '=""), "", (C' + r + ' - B' + r + ') * 24)', '=IF(D' + r + '="", "", IF(D' + r + ' > 8, 14, 0))',
+      w.push([datum, abf ? zeitWert_(abf) : '', ank ? zeitWert_(ank) : '', ueb ? 24 : '=IF(OR(B' + r + '="", C' + r + '=""), "", (C' + r + ' - B' + r + ') * 24)', ueb ? 28 : '=IF(D' + r + '="", "", IF(D' + r + ' > 8, 14, 0))',
         zeitWert_(st), en ? zeitWert_(en) : '', pause, '=IF(OR(F' + r + '="", G' + r + '=""), "", ((G' + r + ' - F' + r + ') - (IF(H' + r + '="", 0, H' + r + ') / 1440)) * 24)',
-        km ? Math.min(km, 40) : '', km > 40 ? km - 40 : '', '=(J' + r + '*0.3)+(K' + r + '*0.38)', ziel]);
+        km ? Math.min(km, 40) : '', km > 40 ? km - 40 : '', '=(J' + r + '*0.3)+(K' + r + '*0.38)', (ueb ? 'Übern. ' : '') + ziel]);
     } else {
       var txt = sonst.length ? sonst[0].text.replace(/ \(.*\)$/, '') : '';
       if (txt === 'Unbez. Urlaub') txt = 'unb. Urlaub';
@@ -1266,4 +1273,20 @@ function lohnlisteDateien_(ich, d) {
   b.getRange(le + 1, 1, 5, 13).setFontWeight('bold'); b.setColumnWidth(13, 320);
   var f2 = alsXlsx_(s2, ordner, j + '_' + mo + '_Reisekostenabr.Stundennachw._' + vorname + '_' + nachname + '.xlsx');
   return { intern: f1.getUrl(), steuer: f2.getUrl(), ordner: ordner.getUrl() };
+}
+
+/* ============================ Reisekosten: Abfahrt / Ankunft zu Hause, km, Übernachtung ============================ */
+function reiseSpeichern_(ich, d) {
+  kopfPruefen_(T.E);
+  var ma = welcherMa_(ich, d.ma); pruefeDatum_(d.datum); pruefeSperre_(ich, ma, d.datum);
+  var zeit = function (x) { return /^\d{2}:\d{2}$/.test(String(x || '')) ? String(x) : ''; };
+  var es = zeilen_(T.E).filter(function (e) { return e.ma === ma && e.datum === d.datum && (e.typ || 'A') === 'A'; })
+    .sort(function (a, b) { return String(a.start) < String(b.start) ? -1 : 1; });
+  if (!es.length) throw new Error('Für diesen Tag gibt es noch keine Arbeitszeit.');
+  es.forEach(function (e, i) {
+    aktualisieren_(T.E, e.id, i === 0
+      ? { abfahrt: zeit(d.abfahrt), ankunft: zeit(d.ankunft), uebern: d.uebern ? 'ja' : '', km: d.km === '' || d.km == null ? '' : Math.max(0, Number(String(d.km).replace(',', '.')) || 0) }
+      : { abfahrt: '', ankunft: '', uebern: '', km: '' });
+  });
+  return monat_(ich, { ma: ma, monat: d.datum.slice(0, 7) });
 }
