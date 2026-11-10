@@ -832,6 +832,7 @@ function formSpeichern(){
   var neu=!e.id; if(neu) e.id=uuid();
   var ma=e.ma||S.nutzer.id;
   var ziel = (neu && ma===S.nutzer.id) ? buchen('eintragSpeichern',{eintrag:e}) : rufe('eintragSpeichern',{eintrag:e}).then(function(m){ monatSetzen(m); });
+  if(e.typ==='A' && e.baustelle && ((e.material||[]).length || (e.belege||[]).length)) setTimeout(function(){ rufeRoh('materialAblegen',{baustelle:e.baustelle}).catch(function(){}); }, 4000);
   ziel.then(function(){
     // falls der laufende Eintrag bearbeitet wurde
     if(S.laufend && S.laufend.id===e.id && e.ende) S.laufend=null;

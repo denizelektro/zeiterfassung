@@ -105,6 +105,7 @@ var AKTIONEN = {
   abrechnungTabelle: { admin: true, fn: function (ich, d) { return abrechnungTabelle_(d); } },
   baustelleNeu:   { fn: function (ich, d) { return baustelleNeu_(ich, d); } },
   meldungFoto:    { ohneLock: true, fn: function (ich, d) { return meldungFoto_(ich, d); } },
+  materialAblegen:{ ohneLock: true, fn: function (ich, d) { return materialAblegen_(String(d.baustelle || '')); } },
   reiseSpeichern: { fn: function (ich, d) { return reiseSpeichern_(ich, d); } },
   lohnliste:      { fn: function (ich, d) { return lohnliste_(ich, d); } },
   zahlungSpeichern:{ fn: function (ich, d) { return zahlungSpeichern_(ich, d); } },
@@ -1321,4 +1322,40 @@ function kundenOrdner_(bsId) {
   var ziel = best && punkte >= 10 ? best : basis.createFolder(b.name);
   kopfPruefen_(T.BS); aktualisieren_(T.BS, b.id, { ordner: ziel.getId() });
   return ziel;
+}
+
+/* Materialliste je Kunde in dessen Drive-Ordner (Installation_Technik › <Kunde> › Materialliste – <Baustelle>) */
+function materialAblegen_(bsId) {
+  var b = finde_(T.BS, bsId); if (!b) return { ok: false };
+  var namen = {}; zeilen_(T.MA).forEach(function (m) { namen[m.id] = m.name; });
+  var es = zeilen_(T.E).filter(function (e) { return e.baustelle === bsId && (e.typ || 'A') === 'A'; }).map(eintragAus_)
+    .sort(function (x, y) { return x.datum < y.datum ? -1 : 1; });
+  var zeilen = [], summe = {}, belege = [];
+  es.forEach(function (e) {
+    (e.material || []).forEach(function (m) {
+      var n = Number(String(m.menge || '').replace(',', '.')) || 0, preis = m.preis == null || m.preis === '' ? '' : Number(m.preis);
+      zeilen.push([deDatum_(e.datum), namen[e.ma] || e.ma, n || m.menge || '', m.einheit || '', m.text || '', preis]);
+      var k = String(m.text || '').trim().toLowerCase() + '|' + (m.einheit || '');
+      var z = summe[k] || (summe[k] = [0, m.einheit || '', String(m.text || '').trim(), 0]);
+      z[0] += n; if (preis !== '') z[3] += preis;
+    });
+    (e.belege || []).forEach(function (x) { belege.push([deDatum_(e.datum), x.name, 'https://drive.google.com/file/d/' + x.id + '/view']); });
+  });
+  if (!zeilen.length && !belege.length) return { ok: true, leer: true };
+  var ordner = kundenOrdner_(bsId), titel = 'Materialliste – ' + b.name, ss;
+  var it = ordner.getFilesByName(titel);
+  if (it.hasNext()) ss = SpreadsheetApp.open(it.next());
+  else { ss = SpreadsheetApp.create(titel); DriveApp.getFileById(ss.getId()).moveTo(ordner); }
+  var sh = ss.getSheets()[0]; sh.clear(); sh.setName('Material');
+  var w = [['Materialliste ' + b.name + (b.adresse ? ' – ' + b.adresse : ''), '', '', '', '', ''], ['Stand: ' + deDatum_(heute_()), '', '', '', '', ''], ['', '', '', '', '', ''],
+    ['GESAMT', 'Menge', 'Einheit', 'Bezeichnung', 'EK gesamt €', '']];
+  Object.keys(summe).sort().forEach(function (k) { var z = summe[k]; w.push(['', Math.round(z[0] * 100) / 100, z[1], z[2], z[3] || '', '']); });
+  w.push(['', '', '', '', '', '']); w.push(['EINZELN', 'Mitarbeiter', 'Menge', 'Einheit', 'Bezeichnung', 'Preis €']);
+  zeilen.forEach(function (z) { w.push(z); });
+  if (belege.length) { w.push(['', '', '', '', '', '']); w.push(['BELEGE', 'Datei', 'Link', '', '', '']); belege.forEach(function (x) { w.push([x[0], x[1], x[2], '', '', '']); }); }
+  sh.getRange(1, 1, w.length, 6).setValues(w);
+  sh.getRange(1, 1).setFontWeight('bold').setFontSize(13);
+  [4, Object.keys(summe).length + 6].forEach(function (r) { sh.getRange(r, 1, 1, 6).setFontWeight('bold'); });
+  sh.setColumnWidth(4, 260); sh.setColumnWidth(5, 260);
+  return { ok: true, url: ss.getUrl() };
 }
