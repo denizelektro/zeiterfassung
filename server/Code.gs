@@ -21,7 +21,7 @@ var T = {
   MA:  { name: 'Mitarbeiter', kopf: ['id', 'name', 'pinHash', 'rolle', 'sprache', 'aktiv', 'urlaubJahr', 'urlaubStartJahr', 'urlaubStartGenommen', 'ntfy', 'stundenlohn', 'saldoStart', 'saldoMonat'] },
   Z:   { name: 'Zahlungen',   kopf: ['id', 'ma', 'datum', 'art', 'betrag', 'notiz'] },
   ME:  { name: 'Nachrichten', kopf: ['id', 'von', 'an', 'zeit', 'baustelle', 'art', 'text', 'gelesen'] },
-  BS:  { name: 'Baustellen',  kopf: ['id', 'name', 'adresse', 'aktiv', 'erstellt', 'fuer'] },
+  BS:  { name: 'Baustellen',  kopf: ['id', 'name', 'adresse', 'aktiv', 'erstellt', 'fuer', 'ordner'] },
   E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert', 'belege', 'abfahrt', 'ankunft', 'uebern'] },
   TAG: { name: 'Abschluesse', kopf: ['ma', 'datum', 'zeit'] },
   SP:  { name: 'Monatssperren', kopf: ['ma', 'monat', 'zeit', 'tabelleId', 'pdfId'] }
@@ -1297,6 +1297,28 @@ function meldungFoto_(ich, d) {
   var teil = kiDatei_(d, 'bild'), heute = heute_();
   var name = heute + '_' + Utilities.formatDate(new Date(), APP.zeitzone, 'HHmmss') + '_' + ich.id + '.jpg';
   var blob = Utilities.newBlob(Utilities.base64Decode(teil.inline_data.data), teil.inline_data.mime_type, name);
-  var ziel = ordner_(ordner_(ordner_(DriveApp.getRootFolder(), APP.ordner), 'Nachrichten-Fotos'), heute.slice(0, 7));
+  var ziel = d.baustelle ? ordner_(kundenOrdner_(String(d.baustelle)), 'Bilder') : null;
+  if (!ziel) ziel = ordner_(ordner_(ordner_(DriveApp.getRootFolder(), APP.ordner), 'Nachrichten-Fotos'), heute.slice(0, 7));
   return { id: ziel.createFile(blob).getId() };
+}
+
+/* Kundenordner: Meine Ablage › Privat › Installation_Technik › <Kunde>. Vorhandenen Ordner finden, sonst anlegen. */
+var KUNDEN_ORDNER_ID = '1LVQDBi0s9W-8TMZAqW7_M4duUisB5q2X';
+function kundenOrdner_(bsId) {
+  var b = finde_(T.BS, bsId); if (!b) return null;
+  if (b.ordner) { try { return DriveApp.getFolderById(b.ordner); } catch (x) {} }
+  var basis = DriveApp.getFolderById(KUNDEN_ORDNER_ID);
+  var norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9äöüß]+/g, ' ').trim(); };
+  var name = norm(b.name), worte = name.split(' ').filter(function (w) { return w.length >= 3; });
+  var it = basis.getFolders(), best = null, punkte = 0;
+  while (it.hasNext()) {
+    var f = it.next(), n = norm(f.getName()), p = 0;
+    if (n === name) p = 100;
+    else if (n && (name.indexOf(n) >= 0 || n.indexOf(name) >= 0)) p = 50;
+    else worte.forEach(function (w) { if ((' ' + n + ' ').indexOf(' ' + w + ' ') >= 0) p += 10; });
+    if (p > punkte) { punkte = p; best = f; }
+  }
+  var ziel = best && punkte >= 10 ? best : basis.createFolder(b.name);
+  kopfPruefen_(T.BS); aktualisieren_(T.BS, b.id, { ordner: ziel.getId() });
+  return ziel;
 }
