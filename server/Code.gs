@@ -19,7 +19,7 @@ var T = {
   MA:  { name: 'Mitarbeiter', kopf: ['id', 'name', 'pinHash', 'rolle', 'sprache', 'aktiv', 'urlaubJahr', 'urlaubStartJahr', 'urlaubStartGenommen', 'ntfy'] },
   ME:  { name: 'Nachrichten', kopf: ['id', 'von', 'an', 'zeit', 'baustelle', 'art', 'text', 'gelesen'] },
   BS:  { name: 'Baustellen',  kopf: ['id', 'name', 'adresse', 'aktiv', 'erstellt'] },
-  E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert'] },
+  E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert', 'belege'] },
   TAG: { name: 'Abschluesse', kopf: ['ma', 'datum', 'zeit'] },
   SP:  { name: 'Monatssperren', kopf: ['ma', 'monat', 'zeit', 'tabelleId', 'pdfId'] }
 };
@@ -57,6 +57,7 @@ function api(token, aktion, daten) {
     var f = AKTIONEN[aktion];
     if (!f) throw new Error('Unbekannte Aktion: ' + aktion);
     if (f.admin && ich.rolle !== 'admin') throw new Error('Keine Berechtigung');
+    if (f.ohneLock) return ok(f.fn(ich, daten, token));
     var lock = LockService.getScriptLock();
     lock.waitLock(20000);
     try {
@@ -93,8 +94,125 @@ var AKTIONEN = {
   mitarbeiterSpeichern: { admin: true, fn: function (ich, d) { return mitarbeiterSpeichern_(d); } },
   monatsbericht:  { admin: true, fn: function (ich, d) { return monatsbericht_(d); } },
   monatEntsperren:{ admin: true, fn: function (ich, d) { return monatEntsperren_(d); } },
-  kalender:       { admin: true, fn: function (ich, d) { return kalender_(d); } }
+  kalender:       { admin: true, fn: function (ich, d) { return kalender_(d); } },
+  kiSprache:      { ohneLock: true, fn: function (ich, d) { return kiSprache_(ich, d); } },
+  kiFoto:         { ohneLock: true, fn: function (ich, d) { return kiFoto_(ich, d); } },
+  belegHochladen: { ohneLock: true, fn: function (ich, d) { return belegHochladen_(ich, d); } },
+  kiSchluessel:   { admin: true, fn: function (ich, d) { return kiSchluessel_(d); } }
 };
+
+/* ============================ KI (Google Gemini) ============================ */
+
+var KI_MODELLE = ['gemini-flash-latest', 'gemini-2.5-flash'];
+var KI_EINHEITEN = 'Stk, m, Pkt, Rolle, kg, Sack';
+
+function kiSchluessel_(d) {
+  var k = String(d.schluessel || '').trim(), props = PropertiesService.getScriptProperties();
+  if (!k) { props.deleteProperty('KI_KEY'); return { kiAktiv: false }; }
+  if (!/^[\w-]{20,}$/.test(k)) throw new Error('Schlüssel sieht nicht richtig aus');
+  var alt = props.getProperty('KI_KEY');
+  props.setProperty('KI_KEY', k);
+  try { kiFrage_([{ text: 'Antworte nur mit {"ok":true}' }]); }
+  catch (x) { if (alt) props.setProperty('KI_KEY', alt); else props.deleteProperty('KI_KEY'); throw new Error('Schlüssel funktioniert nicht: ' + x.message); }
+  return { kiAktiv: true };
+}
+function kiAktiv_() { return !!PropertiesService.getScriptProperties().getProperty('KI_KEY'); }
+
+/** Schickt Teile (Text/Bild/Audio) an Gemini und gibt das JSON der Antwort zurück. */
+function kiFrage_(teile) {
+  var key = PropertiesService.getScriptProperties().getProperty('KI_KEY');
+  if (!key) throw new Error('KI_FEHLT');
+  var letzter = '';
+  for (var i = 0; i < KI_MODELLE.length; i++) {
+    var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + KI_MODELLE[i] + ':generateContent', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { 'x-goog-api-key': key },
+      payload: JSON.stringify({ contents: [{ role: 'user', parts: teile }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.2 } })
+    });
+    var code = r.getResponseCode(), txt = r.getContentText();
+    if (code === 200) {
+      var j = JSON.parse(txt), c = j.candidates && j.candidates[0];
+      var t = c && c.content && c.content.parts ? c.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
+      t = t.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+      return JSON.parse(t || '{}');
+    }
+    letzter = code + ' ' + txt.slice(0, 200);
+    if (code === 429) throw new Error('KI_LIMIT');
+    if (code !== 404 && code !== 400) break;
+  }
+  throw new Error('KI: ' + letzter);
+}
+function kiDatei_(d, art) {
+  var b64 = String(d.daten || ''), mime = String(d.mime || '');
+  if (!b64) throw new Error('Keine Datei');
+  if (b64.length > 9 * 1024 * 1024) throw new Error('Datei zu groß');
+  if (art === 'audio' && !/^audio\//.test(mime)) mime = 'audio/webm';
+  mime = mime.split(';')[0];
+  if (art === 'bild' && !/^image\//.test(mime)) mime = 'image/jpeg';
+  return { inline_data: { mime_type: mime, data: b64 } };
+}
+function bsName_(id) { var b = id ? finde_(T.BS, id) : null; return b ? b.name : ''; }
+function matSauber_(liste) {
+  return (liste || []).filter(function (m) { return m && String(m.text || '').trim(); }).slice(0, 30).map(function (m) {
+    var e = String(m.einheit || 'Stk'); if (['Stk', 'm', 'Pkt', 'Rolle', 'kg', 'Sack'].indexOf(e) < 0) e = 'Stk';
+    var o = { menge: m.menge == null ? '' : String(m.menge).replace('.', ','), einheit: e, text: String(m.text).trim().slice(0, 120) };
+    if (m.preis != null && m.preis !== '' && !isNaN(Number(m.preis))) o.preis = Math.round(Number(m.preis) * 100) / 100;
+    return o;
+  });
+}
+var KI_ROLLE = 'Du hilfst in der Zeiterfassung eines kleinen Elektroinstallations-Betriebs in Deutschland. ' +
+  'Mitarbeiter sprechen Deutsch oder Türkisch (oft gemischt). Ergebnisse IMMER auf Deutsch, in der Fachsprache eines Elektrikers ' +
+  '(z. B. NYM-J 3x1,5, Hohlwanddose, Unterputzdose, Abzweigdose, Wago-Klemme, Schukosteckdose, Dübel 6 mm, Kabelkanal, FI/LS, Sicherungsautomat B16). ';
+
+function kiSprache_(ich, d) {
+  var feld = d.feld === 'material' ? 'material' : 'taetigkeit';
+  var auftrag = feld === 'material'
+    ? 'Höre die Sprachaufnahme an. Darin werden verbrauchte Materialien genannt. Gib sie als Liste zurück. ' +
+      'Antworte als JSON: {"material":[{"menge":Zahl oder "","einheit":eine von ' + KI_EINHEITEN + ',"text":"saubere deutsche Bezeichnung"}],"gehoert":"was gesagt wurde (Originalsprache)"}. ' +
+      'Meter → m, Stück/adet → Stk, Paket → Pkt, Rolle/rulo → Rolle. Zahlwörter in Zahlen umwandeln. Nichts erfinden.'
+    : 'Höre die Sprachaufnahme an. Darin beschreibt jemand, was er heute auf der Baustelle gemacht hat. ' +
+      'Schreibe daraus einen kurzen, sauberen deutschen Text für einen Stundenzettel (Stichpunkte mit Komma oder kurze Sätze, keine Füllwörter, korrekte Rechtschreibung). ' +
+      'Antworte als JSON: {"text":"deutscher Text","tr":"dieselbe Bedeutung kurz auf Türkisch","gehoert":"was gesagt wurde (Originalsprache)"}. Nichts erfinden.';
+  var r = kiFrage_([{ text: KI_ROLLE + auftrag }, kiDatei_(d, 'audio')]);
+  if (feld === 'material') return { material: matSauber_(r.material), gehoert: String(r.gehoert || '') };
+  return { text: String(r.text || '').trim().slice(0, 500), tr: String(r.tr || ''), gehoert: String(r.gehoert || '') };
+}
+
+function kiFoto_(ich, d) {
+  var auftrag = 'Auf dem Foto ist Material von der Baustelle (z. B. Kabel, Dosen, Schalter, Dübel, Schrauben, Klemmen, Leuchtmittel) – ' +
+    'oft mit Etikett, Aufdruck oder Barcode. Erkenne, was es ist, und lies, wenn sichtbar, Hersteller, Typ, Artikelnummer und EAN-Barcode ab. ' +
+    'Wenn eine Packungsgröße oder Ringlänge erkennbar ist, nutze sie als Vorschlag für die Menge, sonst menge "". ' +
+    'Antworte als JSON: {"material":[{"menge":Zahl oder "","einheit":eine von ' + KI_EINHEITEN + ',"text":"kurze deutsche Bezeichnung wie ein Elektriker sie schreibt, inkl. Typ/Größe"}],' +
+    '"ean":"Barcode-Nummer falls lesbar sonst leer","sicher":true/false}. Mehrere verschiedene Artikel auf dem Foto = mehrere Einträge. Nichts erfinden; wenn unklar, beschreibe es allgemein.';
+  var r = kiFrage_([{ text: KI_ROLLE + auftrag }, kiDatei_(d, 'bild')]);
+  return { material: matSauber_(r.material), ean: String(r.ean || ''), sicher: r.sicher !== false };
+}
+
+function belegHochladen_(ich, d) {
+  var datum = /^\d{4}-\d{2}-\d{2}$/.test(String(d.datum)) ? String(d.datum) : heute_();
+  var teil = kiDatei_(d, 'bild');
+  var ma = finde_(T.MA, ich.id);
+  var name = datum + '_' + (bsName_(d.baustelle) || 'Beleg').replace(/[\\\/:*?"<>|]/g, '-').slice(0, 40) + '_' + ((ma && ma.name) || ich.id).split(' ')[0] + '_' + Utilities.formatDate(new Date(), APP.zeitzone, 'HHmmss') + '.jpg';
+  var blob = Utilities.newBlob(Utilities.base64Decode(teil.inline_data.data), teil.inline_data.mime_type, name);
+  var root = ordner_(DriveApp.getRootFolder(), APP.ordner);
+  var ziel = ordner_(ordner_(ordner_(root, 'Belege'), datum.slice(0, 4)), datum.slice(0, 7));
+  var f = ziel.createFile(blob);
+  var aus = { beleg: { id: f.getId(), name: name }, material: [], summe: '', haendler: '' };
+  if (kiAktiv_()) {
+    try {
+      var r = kiFrage_([{ text: KI_ROLLE + 'Das ist ein Kassenbon oder eine Rechnung über Material-Einkauf. Lies die gekauften Positionen ab. ' +
+        'Antworte als JSON: {"haendler":"Name des Geschäfts","summe":Gesamtbetrag brutto als Zahl,"material":[{"menge":Zahl,"einheit":eine von ' + KI_EINHEITEN + ',"text":"verständliche deutsche Bezeichnung","preis":Gesamtpreis der Position brutto als Zahl}]}. Nichts erfinden.' }, teil]);
+      aus.material = matSauber_(r.material); aus.summe = r.summe || ''; aus.haendler = String(r.haendler || '');
+      f.setDescription((aus.haendler ? aus.haendler + ' · ' : '') + (aus.summe ? aus.summe + ' €' : ''));
+    } catch (x) { aus.kiFehler = String(x.message || x); }
+  }
+  if (ich.rolle !== 'admin') pushAnAdmin_('🧾 Beleg von ' + ((ma && ma.name) || ich.id), (aus.haendler ? aus.haendler + ' · ' : '') + (aus.summe ? aus.summe + ' € · ' : '') + (bsName_(d.baustelle) || datum));
+  return aus;
+}
+function pushAnAdmin_(titel, text) {
+  try { zeilen_(T.MA).filter(function (m) { return m.rolle === 'admin' && m.aktiv !== 'nein'; }).forEach(function (m) { pushSenden_(m.id, titel, text, 3); }); } catch (x) {}
+}
 
 /* ============================ Google Kalender (Mini-Fenster) ============================ */
 
@@ -181,7 +299,8 @@ function startDaten_(ich) {
     nutzer: ich,
     baustellen: zeilen_(T.BS).filter(function (b) { return b.aktiv !== 'nein'; }).map(function (b) { return { id: b.id, name: b.name, adresse: b.adresse }; }),
     heute: heute_(),
-    ungelesen: ungelesen_(ich)
+    ungelesen: ungelesen_(ich),
+    kiAktiv: kiAktiv_()
   };
   if (ich.rolle === 'admin') {
     r.mitarbeiter = zeilen_(T.MA).map(function (m) { var o = oeffentlich_(m); o.aktiv = m.aktiv !== 'nein';
@@ -220,7 +339,8 @@ function eintragAus_(e) {
   return {
     id: e.id, ma: e.ma, datum: e.datum, typ: e.typ || 'A', baustelle: e.baustelle,
     start: e.start, ende: e.ende, pause: Number(e.pause || 0), pauseStart: e.pauseStart || '',
-    taetigkeit: e.taetigkeit, material: m, km: e.km === '' ? '' : Number(e.km || 0)
+    taetigkeit: e.taetigkeit, material: m, km: e.km === '' ? '' : Number(e.km || 0),
+    belege: belegeLesen_(e.belege)
   };
 }
 
@@ -269,6 +389,7 @@ function beenden_(l, zeit) {
 /* ============================ Einträge ============================ */
 
 function eintragSpeichern_(ich, d) {
+  kopfPruefen_(T.E);
   var e = d.eintrag;
   var alt = e.id ? finde_(T.E, e.id) : null;
   var ma = alt ? alt.ma : welcherMa_(ich, e.ma);
@@ -283,7 +404,14 @@ function eintragSpeichern_(ich, d) {
     if (e.ende) { pruefeZeit_(e.ende); if (minDiff_(e.start, e.ende) <= 0) throw new Error('ENDE_VOR_BEGINN'); }
   }
   var material = (e.material || []).filter(function (m) { return m && String(m.text || '').trim(); })
-    .map(function (m) { return { menge: String(m.menge || '').slice(0, 10), einheit: String(m.einheit || '').slice(0, 10), text: String(m.text).slice(0, 120) }; });
+    .map(function (m) {
+      var o = { menge: String(m.menge || '').slice(0, 10), einheit: String(m.einheit || '').slice(0, 10), text: String(m.text).slice(0, 120) };
+      var p = String(m.preis == null ? '' : m.preis).replace(',', '.').trim();
+      if (p !== '' && !isNaN(Number(p))) o.preis = Math.round(Number(p) * 100) / 100;
+      return o;
+    });
+  var belege = (e.belege || []).filter(function (b) { return b && /^[\w-]{10,}$/.test(String(b.id)); })
+    .map(function (b) { return { id: String(b.id), name: String(b.name || 'Beleg').slice(0, 80) }; }).slice(0, 20);
   var obj = {
     id: e.id || Utilities.getUuid(), ma: ma, datum: e.datum, typ: typ,
     baustelle: typ === 'A' ? e.baustelle : '',
@@ -293,7 +421,8 @@ function eintragSpeichern_(ich, d) {
     taetigkeit: String(e.taetigkeit || '').slice(0, 500),
     material: JSON.stringify(material),
     km: e.km === '' || e.km == null ? '' : Math.max(0, Number(e.km) || 0),
-    geaendert: jetzt_()
+    geaendert: jetzt_(),
+    belege: belege.length ? JSON.stringify(belege) : ''
   };
   if (alt) aktualisieren_(T.E, obj.id, obj); else { schreiben_(T.E, obj); if (typ === 'A') tagWiederOeffnen_(ma, e.datum); }
   return monat_(ich, { ma: ma, monat: e.datum.slice(0, 7) });
@@ -786,3 +915,5 @@ function einrichten() {
   ordner_(DriveApp.getRootFolder(), APP.ordner);
   Logger.log('Fertig. Jetzt: Bereitstellen → Neue Bereitstellung → Web-App.');
 }
+
+function belegeLesen_(v) { try { var b = v ? JSON.parse(v) : []; return Array.isArray(b) ? b : []; } catch (x) { return []; } }

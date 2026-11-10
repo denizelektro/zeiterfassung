@@ -128,6 +128,18 @@
   .mat{display:grid;grid-template-columns:64px 78px 1fr 36px;gap:6px;margin-bottom:6px}
   .mat .eing{padding:11px 8px}
   .mat .x{color:var(--rot);font-size:20px}
+  .mat.mp{grid-template-columns:54px 70px 1fr 66px 30px}
+  .kiReihe{display:flex;gap:6px;margin-bottom:8px}
+  .kiReihe button{flex:1;padding:10px 4px;border-radius:12px;background:#fff;border:1px solid #cfd5dc;font-weight:700;font-size:.85rem;line-height:1.15}
+  .kiReihe button.rec,.mikro.rec{background:var(--rot);color:#fff;border-color:var(--rot);animation:puls 1.2s infinite}
+  .kiReihe button.ki,.mikro.ki{background:var(--gelbhell);color:#7a4a00}
+  .kiReihe .zw .de{font-size:.72rem}
+  .lblZeile{display:flex;justify-content:space-between;align-items:flex-end}
+  .mikro{padding:7px 12px;border-radius:99px;background:#fff;border:1px solid #cfd5dc;font-weight:700;font-size:.85rem;margin-top:8px}
+  .belege{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
+  .belege span{background:#fff;border:1px solid #cfd5dc;border-radius:99px;padding:6px 10px;font-size:.82rem}
+  .belege a{color:var(--navy);font-weight:600;text-decoration:none}
+  .belege .x{color:var(--rot);margin-left:6px}
   .hinweis{background:var(--gelbhell);color:#7a4a00;border-radius:12px;padding:10px 12px;font-size:.88rem;margin-bottom:12px}
   .fehlerbox{background:var(--rothell);color:var(--rot);border-radius:12px;padding:10px 12px;font-size:.9rem;margin-top:10px}
   .toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));transform:translate(-50%,-140%);background:#1b1f24;color:#fff;padding:12px 18px;border-radius:14px;z-index:40;transition:transform .25s;max-width:92vw;font-size:.92rem;text-align:center}
@@ -173,7 +185,7 @@ window.google = { script: { run: (function mk(ok, nein) {
     if (p === 'withFailureHandler') return function (h) { return mk(ok, h); };
     return function () {
       var a = [].slice.call(arguments), ctl = window.AbortController ? new AbortController() : null;
-      var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 30000);
+      var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 90000);
       fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ token: a[0], aktion: a[1], daten: a[2] }), signal: ctl ? ctl.signal : undefined })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -206,13 +218,17 @@ var TX = {
   eintragBearb:['Kaydı düzenle','Eintrag bearbeiten'], eintragNeu:['Yeni kayıt','Neuer Eintrag'], zuHeute:['Bugüne git','Zu heute'],
   nachher:['Malzeme ve km ekle','Material & km ergänzen'], nichtJetzt:['Şimdi değil','Nicht jetzt'],
   sicherLoeschen:['Bu kayıt silinsin mi?','Eintrag wirklich löschen?'], tagLaeuft:['Çalışma devam ediyor','Arbeit läuft noch'],
-  pauseBisher:['Mola','Pause'], navi:['Yol tarifi','Navigation'], offenTage:['Kapatılmamış gün','Offene Tage']
+  pauseBisher:['Mola','Pause'], navi:['Yol tarifi','Navigation'], offenTage:['Kapatılmamış gün','Offene Tage'],
+  sprechen:['Konuş','Sprechen'], foto:['Fotoğraf','Foto'], beleg:['Fiş / Fatura','Beleg'], stopp:['Bitir','Fertig'],
+  kiLaeuft:['Yapay zeka çalışıyor…','KI arbeitet…'], belegOk:['Fiş kaydedildi','Beleg gespeichert'], mikroNein:['Mikrofon izni yok','Kein Zugriff aufs Mikrofon'],
+  kiNichts:['Anlaşılamadı – tekrar deneyin','Nichts erkannt – bitte nochmal'], kiPruefen:['Lütfen kontrol edin','Bitte kurz prüfen']
 };
 var FEHLER = {
   PIN_FALSCH:['PIN yanlış','PIN falsch'], ZU_VIELE_VERSUCHE:['Çok fazla deneme. 15 dakika bekleyin.','Zu viele Versuche. 15 Minuten warten.'],
   LAEUFT_SCHON:['Zaten çalışıyorsunuz','Es läuft schon eine Zeit'], BAUSTELLE_FEHLT:['Lütfen şantiye seçin','Bitte Baustelle wählen'],
   ENDE_VOR_BEGINN:['Bitiş saati başlangıçtan önce','Ende liegt vor Beginn'], MONAT_GESPERRT:['Bu ay kapatıldı','Monat ist abgeschlossen'],
-  LAEUFT_NOCH:['Önce "İş bitti" deyin','Erst Feierabend buchen']
+  LAEUFT_NOCH:['Önce "İş bitti" deyin','Erst Feierabend buchen'],
+  KI_FEHLT:['Yapay zeka henüz ayarlanmadı','KI noch nicht eingerichtet (Verwaltung → Team)'], KI_LIMIT:['Çok fazla istek – 1 dakika bekleyin','KI-Limit erreicht – 1 Minute warten']
 };
 var TR_TAGE=['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'], DE_TAGE=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 var TR_KURZ=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'], DE_KURZ=['Mo','Di','Mi','Do','Fr','Sa','So'];
@@ -348,7 +364,7 @@ function init(){
 function startSetzen(d){
   if(d.ungelesen!==undefined) S.ungelesen=d.ungelesen;
   try{ LS.setItem('ze_start', JSON.stringify(d)); LS.setItem('ze_sprache', d.nutzer.sprache||'de'); }catch(e){}
-  S.nutzer=d.nutzer; S.baustellen=d.baustellen; S.mitarbeiter=d.mitarbeiter||[]; S.alleBaustellen=d.alleBaustellen||[];
+  S.nutzer=d.nutzer; S.baustellen=d.baustellen; S.kiAktiv=!!d.kiAktiv; S.mitarbeiter=d.mitarbeiter||[]; S.alleBaustellen=d.alleBaustellen||[];
   S.ma = S.ma || S.nutzer.id; S.kalMonat = S.kalMonat || monatVon(heuteIso()); S.adminMonat = S.adminMonat || monatVon(heuteIso());
   document.documentElement.lang = tr() ? 'tr' : 'de';
 }
@@ -483,9 +499,9 @@ function eintragsListe(liste, datum, m){
     if(e.typ!=='A'){ h+=swAuf(e,darf)+'<button class="eintrag" '+(darf?'onclick="eintragForm(\''+e.id+'\')"':'')+'><span class="pill '+(e.typ==='U'?'p-blau':'p-rot')+'">'+(e.typ==='U'?'🏖 '+Lt('urlaub'):'🤒 '+Lt('krank'))+'</span></button>'+swZu(); return; }
     var laeuft=!e.ende;
     h+=swAuf(e,darf)+'<button class="eintrag" '+(darf?'onclick="eintragForm(\''+e.id+'\')"':'')+'><div class="k"><span class="bsn">'+esc(bsName(e.baustelle))+'</span><span class="std">'+(laeuft?'<span class="pill p-gelb">● '+e.start+'</span>':fStd(std(e))+' '+Lt('stdKurz').split(' / ').pop())+'</span></div>'+
-      '<div class="info">'+e.start+' – '+(e.ende||'…')+(e.pause?' · '+Lt('pauseBisher').split(' / ').pop()+' '+e.pause+' Min.':'')+(e.km!==''&&e.km!=null&&+e.km>0?' · '+e.km+' km':'')+'</div>'+
+      '<div class="info">'+e.start+' – '+(e.ende||'…')+(e.pause?' · '+Lt('pauseBisher').split(' / ').pop()+' '+e.pause+' Min.':'')+(e.km!==''&&e.km!=null&&+e.km>0?' · '+e.km+' km':'')+((e.belege||[]).length?' · 🧾 '+e.belege.length:'')+'</div>'+
       (e.taetigkeit?'<div class="taet">'+esc(e.taetigkeit)+'</div>':'')+
-      (e.material&&e.material.length?'<ul>'+e.material.map(function(x){return '<li>'+esc((x.menge?x.menge+' ':'')+(x.einheit?x.einheit+' ':'')+x.text)+'</li>';}).join('')+'</ul>':'')+'</button>'+swZu();
+      (e.material&&e.material.length?'<ul>'+e.material.map(function(x){return '<li>'+esc((x.menge?x.menge+' ':'')+(x.einheit?x.einheit+' ':'')+x.text)+(S.nutzer.rolle==='admin'&&x.preis!=null&&x.preis!==''?' · '+euro(x.preis):'')+'</li>';}).join('')+'</ul>':'')+'</button>'+swZu();
   });
   var summe = liste.reduce(function(s,e){return s+std(e);},0);
   var pw = pausenWarnung(liste); if(pw) h+='<div class="hinweis">⚠ '+pw+'</div>';
@@ -648,11 +664,18 @@ function zeichneForm(){
        '<div><label class="f">'+L('ende','inl')+'</label><input type="time" class="eing" id="fEnde" value="'+(e.ende||'')+'" '+(laeuft?'placeholder="…"':'')+'></div></div>';
     h+='<label class="f">'+L('pauseMin','inl')+'</label><div class="chips" id="fPauseChips">'+[0,15,30,45,60].map(function(p){return '<button class="'+(+e.pause===p?'an':'')+'" onclick="formLesen();F.pause='+p+';zeichneForm()">'+p+'</button>';}).join('')+
        '<input type="number" inputmode="numeric" class="eing" id="fPause" style="width:90px;padding:9px" value="'+(+e.pause||0)+'"></div>';
-    h+='<label class="f">'+L('taetigkeit','inl')+'</label><textarea class="eing" id="fTaet" placeholder="'+(tr()?'örn. Priz montajı / ':'')+'z. B. Steckdosen gesetzt">'+esc(e.taetigkeit||'')+'</textarea>';
-    h+='<label class="f">'+L('material','inl')+'</label><div id="fMat">'+e.material.map(function(m,i){
-      return '<div class="mat"><input class="eing" inputmode="decimal" placeholder="'+(tr()?'Miktar':'Menge')+'" value="'+esc(m.menge)+'" data-i="'+i+'" data-k="menge">'+
+    h+='<div class="lblZeile"><label class="f">'+L('taetigkeit','inl')+'</label><button class="mikro" id="kiB_taetigkeit" onclick="kiSprache(\'taetigkeit\')">🎤 '+Lt('sprechen')+'</button></div><textarea class="eing" id="fTaet" placeholder="'+(tr()?'örn. Priz montajı / ':'')+'z. B. Steckdosen gesetzt">'+esc(e.taetigkeit||'')+'</textarea>';
+    var adm=S.nutzer.rolle==='admin';
+    h+='<label class="f">'+L('material','inl')+'</label><div class="kiReihe">'+
+      '<button id="kiB_material" onclick="kiSprache(\'material\')">🎤 '+L('sprechen')+'</button>'+
+      '<button id="kiB_foto" onclick="kiBild(\'foto\')">📷 '+L('foto')+'</button>'+
+      '<button id="kiB_beleg" onclick="kiBild(\'beleg\')">🧾 '+L('beleg')+'</button></div>'+
+      ((e.belege||[]).length?'<div class="belege">'+e.belege.map(function(b,i){ return '<span>'+(adm?'<a href="https://drive.google.com/file/d/'+esc(b.id)+'/view" target="_blank">🧾 '+esc(b.name.replace(/\.jpg$/,''))+'</a>':'🧾 '+Lt('beleg')+' '+(i+1)+' ✓')+(adm?'<button class="x" onclick="formLesen();F.belege.splice('+i+',1);zeichneForm()">✕</button>':'')+'</span>'; }).join('')+'</div>':'')+
+      '<div id="fMat">'+e.material.map(function(m,i){
+      return '<div class="mat'+(adm?' mp':'')+'"><input class="eing" inputmode="decimal" placeholder="'+(tr()?'Miktar':'Menge')+'" value="'+esc(m.menge)+'" data-i="'+i+'" data-k="menge">'+
         '<select class="eing" data-i="'+i+'" data-k="einheit">'+EINHEITEN.map(function(x){return '<option value="'+x[0]+'" '+(m.einheit===x[0]?'selected':'')+'>'+(tr()&&x[1]!==x[0]?x[1]+' / ':'')+x[0]+'</option>';}).join('')+'</select>'+
         '<input class="eing" placeholder="'+(tr()?'NYM 3x1,5':'z. B. NYM 3x1,5')+'" value="'+esc(m.text)+'" data-i="'+i+'" data-k="text">'+
+        (adm?'<input class="eing" inputmode="decimal" placeholder="€" value="'+(m.preis==null?'':esc(String(m.preis).replace('.',',')))+'" data-i="'+i+'" data-k="preis">':'')+
         '<button class="x" onclick="formLesen();F.material.splice('+i+',1);if(!F.material.length)F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">✕</button></div>'; }).join('')+'</div>'+
       '<button class="mittel b-hell" style="min-height:44px" onclick="formLesen();F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">＋ '+L('matHinzu')+'</button>';
     h+='<label class="f">'+L('km','inl')+'</label><input type="number" inputmode="decimal" class="eing" id="fKm" value="'+(e.km===''||e.km==null?'':e.km)+'" placeholder="0">';
@@ -676,7 +699,7 @@ function formSpeichern(){
     if(!e.baustelle) return fFehler(Lt('BAUSTELLE_FEHLT'));
     if(!e.start) return fFehler(Lt('beginn')+' ?');
     if(e.ende && minDiff(e.start,e.ende)<=0) return fFehler(Lt('ENDE_VOR_BEGINN'));
-    e.material=e.material.filter(function(m){return String(m.text||'').trim();});
+    e.material=e.material.filter(function(m){return String(m.text||'').trim();}).map(function(m){ if(m.preis!=null){ var p=String(m.preis).replace(',','.').trim(); if(p===''||isNaN(+p)) delete m.preis; else m.preis=+p; } return m; });
     e.km = e.km===''?'':String(e.km).replace(',','.');
   }
   var neu=!e.id; if(neu) e.id=uuid();
@@ -693,6 +716,76 @@ function formLoeschen(){ var f=F; frage(L('sicherLoeschen'), L('loeschen'), func
 function loescheJetzt(){
   rufe('eintragLoeschen',{id:F.id, ma:F.ma, monat:monatVon(F.datum)}).then(function(m){ monatSetzen(m); if(S.laufend&&S.laufend.id===F.id) S.laufend=null; schliesseBlatt(); toast('🗑'); render(); })
     .catch(function(f){ fFehler(fehlerText(f)); });
+}
+
+/* ======================= KI: Sprache, Foto, Beleg ======================= */
+function euro(x){ return (+x).toFixed(2).replace('.',',')+' €'; }
+var KI={rec:null};
+function kiKnopf(id, zustand, text){ var b=$(id); if(!b) return; b.classList.remove('rec','ki'); if(zustand) b.classList.add(zustand); if(text!=null) b.innerHTML=text; }
+function kiKnopfReset(){ formLesen(); zeichneForm(); }
+function kiFehler(f){ toast(f&&f.fehler&&/^KI: /.test(f.fehler)?'KI: '+(tr()?'hata / ':'')+'Fehler':fehlerText(f)); kiKnopfReset(); }
+function kiSprache(feld){
+  if(KI.rec){ if(KI.rec.feld===feld) KI.rec.stopp(); return; }
+  if(!S.kiAktiv) return toast(Lt('KI_FEHLT'));
+  if(!navigator.mediaDevices||!window.MediaRecorder) return toast(Lt('mikroNein'));
+  var id='kiB_'+feld;
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(strom){
+    var typ=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/aac'].filter(function(t){ return MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t); })[0]||'';
+    var mr=new MediaRecorder(strom, typ?{mimeType:typ}:undefined), teile=[], t0=Date.now();
+    mr.ondataavailable=function(ev){ if(ev.data&&ev.data.size) teile.push(ev.data); };
+    var uhr=setInterval(function(){ var s=Math.round((Date.now()-t0)/1000); kiKnopf(id,'rec','■ '+Lt('stopp').split(' / ').pop()+' '+s+'s'); if(s>=90) KI.rec.stopp(); },500);
+    KI.rec={feld:feld, stopp:function(){ clearInterval(uhr); try{ mr.stop(); }catch(e){} }};
+    mr.onstop=function(){
+      strom.getTracks().forEach(function(t){ t.stop(); }); KI.rec=null;
+      var blob=new Blob(teile,{type:(mr.mimeType||typ||'audio/webm')});
+      if(Date.now()-t0<800||!blob.size){ kiKnopfReset(); return; }
+      kiKnopf(id,'ki','⏳ '+Lt('kiLaeuft').split(' / ').pop());
+      inBase64(blob).then(function(b64){ return rufeRoh('kiSprache',{feld:feld, daten:b64, mime:blob.type}); }).then(function(r){
+        formLesen();
+        if(feld==='taetigkeit'){
+          if(!r.text) return toast(Lt('kiNichts')), kiKnopfReset();
+          F.taetigkeit=(F.taetigkeit&&F.taetigkeit.trim()?F.taetigkeit.trim()+', ':'')+r.text;
+          zeichneForm(); toast(tr()&&r.tr?'✓ '+r.tr:'✓ '+Lt('kiPruefen'));
+        } else { if(!matUebernehmen(r.material)) toast(Lt('kiNichts')); }
+      }).catch(kiFehler);
+    };
+    mr.start(); kiKnopf(id,'rec','■ '+Lt('stopp').split(' / ').pop());
+  }).catch(function(){ toast(Lt('mikroNein')); });
+}
+function matUebernehmen(liste){
+  formLesen(); liste=liste||[];
+  if(!liste.length){ zeichneForm(); return false; }
+  F.material=F.material.filter(function(m){ return String(m.text||'').trim(); }).concat(liste);
+  zeichneForm(); toast('✓ '+liste.length+' × '+Lt('material').split(' / ').pop()+' – '+Lt('kiPruefen'));
+  setTimeout(function(){ var el=$('fMat'); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); },100);
+  return true;
+}
+function kiBild(art){
+  if(art==='foto'&&!S.kiAktiv) return toast(Lt('KI_FEHLT'));
+  var inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.setAttribute('capture','environment');
+  inp.onchange=function(){
+    var f=inp.files&&inp.files[0]; if(!f) return;
+    formLesen(); var id='kiB_'+art; kiKnopf(id,'ki','⏳ '+Lt('kiLaeuft').split(' / ').pop());
+    bildKlein(f, art==='beleg'?2000:1400).then(function(b64){
+      if(art==='foto') return rufeRoh('kiFoto',{daten:b64, mime:'image/jpeg'}).then(function(r){ if(!matUebernehmen(r.material)) toast(Lt('kiNichts')); });
+      return rufeRoh('belegHochladen',{daten:b64, mime:'image/jpeg', datum:F.datum, baustelle:F.baustelle}).then(function(r){
+        formLesen(); F.belege=(F.belege||[]).concat([r.beleg]);
+        var ok=r.material&&r.material.length; if(ok) matUebernehmen(r.material); else zeichneForm();
+        toast('✓ '+Lt('belegOk')+(r.summe?' · '+euro(r.summe):''));
+      });
+    }).catch(kiFehler);
+  };
+  inp.click();
+}
+function inBase64(blob){ return new Promise(function(ok,nein){ var r=new FileReader(); r.onload=function(){ ok(String(r.result).split(',')[1]); }; r.onerror=nein; r.readAsDataURL(blob); }); }
+function bildKlein(datei, max){
+  return new Promise(function(ok,nein){
+    var url=URL.createObjectURL(datei), img=new Image();
+    img.onload=function(){ var s=Math.min(1,max/Math.max(img.width,img.height)), c=document.createElement('canvas');
+      c.width=Math.round(img.width*s); c.height=Math.round(img.height*s); c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg',0.82).split(',')[1]); };
+    img.onerror=function(){ nein({fehler:'Bild nicht lesbar'}); }; img.src=url;
+  });
 }
 
 function abwesenheitForm(){
@@ -745,6 +838,10 @@ function zeigeVerwaltung(){
   if(S.adminTab==='team'){
     h+='<div class="karte">'+S.mitarbeiter.map(function(m){ return '<div class="zeileL"><div><b style="'+(m.aktiv?'':'opacity:.45')+'">'+esc(m.name)+'</b><div class="klein">'+(m.rolle==='admin'?'Admin':'Mitarbeiter')+' · '+(m.sprache==='tr'?'Türkisch + Deutsch':'Deutsch')+'</div></div><button class="pill p-grau" onclick="maForm(\''+m.id+'\')">✎ Bearbeiten</button></div>'; }).join('')+'</div>'+
        '<button class="mittel b-hell" onclick="maForm(null)">＋ Mitarbeiter hinzufügen</button>';
+    h+='<div class="karte" style="margin-top:14px"><p class="titel">🤖 KI für Sprache, Foto & Belege '+(S.kiAktiv?'<span class="pill p-gruen">aktiv</span>':'<span class="pill p-grau">aus</span>')+'</p>'+
+      '<p class="klein">Kostenloser Schlüssel von Google: <a class="link" href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> öffnen → „API-Schlüssel erstellen“ → kopieren und hier einfügen.</p>'+
+      '<input class="eing" id="kiKey" placeholder="'+(S.kiAktiv?'neuer Schlüssel (optional)':'API-Schlüssel einfügen')+'" autocomplete="off"><div style="height:8px"></div>'+
+      '<button class="mittel b-navy" style="color:#fff" onclick="kiKeySpeichern()">Speichern & testen</button></div>';
   }
   $('inhalt').innerHTML=h;
 }
@@ -757,6 +854,11 @@ function bericht(id){
 function entsperren(id){ frage('Monat wieder freigeben? Der Mitarbeiter kann dann wieder ändern.', 'Entsperren', function(){ entsperrenJetzt(id); }); }
 function entsperrenJetzt(id){
   rufe('monatEntsperren',{ma:id, monat:S.adminMonat}).then(function(u){ S.uebersicht={monat:S.adminMonat,liste:u}; delete S.monate[schl(id,S.adminMonat)]; zeigeVerwaltung(); }).catch(function(f){ toast(fehlerText(f)); }); }
+function kiKeySpeichern(){
+  var k=$('kiKey').value.trim(); if(!k) return;
+  rufe('kiSchluessel',{schluessel:k}).then(function(r){ S.kiAktiv=r.kiAktiv; try{ var st=JSON.parse(LS.getItem('ze_start')); st.kiAktiv=r.kiAktiv; LS.setItem('ze_start',JSON.stringify(st)); }catch(e){} toast('✓ KI aktiv'); zeigeVerwaltung(); })
+    .catch(function(f){ toast(fehlerText(f)); });
+}
 function nachAdmin(d){ startSetzen(d); zeigeVerwaltung(); }
 function bsSpeichern(){ var n=$('nbName').value.trim(); if(!n) return toast('Name fehlt'); rufe('baustelleSpeichern',{baustelle:{name:n, adresse:$('nbAdr').value}}).then(function(d){ nachAdmin(d); toast('✓ Baustelle angelegt – erscheint sofort bei allen'); }).catch(function(f){ toast(fehlerText(f)); }); }
 function bsLoeschen(id){ var b=S.alleBaustellen.filter(function(x){return x.id===id;})[0];
