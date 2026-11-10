@@ -104,7 +104,8 @@ var AKTIONEN = {
 
 /* ============================ KI (Google Gemini) ============================ */
 
-var KI_MODELLE = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite'];
+// Lite zuerst: schnell und kaum überlastet; das große Modell nur als Ersatz
+var KI_MODELLE = ['gemini-flash-lite-latest', 'gemini-flash-latest'];
 var KI_EINHEITEN = 'Stk, m, Pkt, Rolle, kg, Sack';
 
 function kiSchluessel_(d) {
@@ -942,3 +943,6 @@ function einrichten() {
 }
 
 function belegeLesen_(v) { try { var b = v ? JSON.parse(v) : []; return Array.isArray(b) ? b : []; } catch (x) { return []; } }
+
+/** Im Editor ausführen: misst, wie schnell die KI-Modelle antworten. */
+function kiTesten() { kiDiagnose_({}).forEach(function (z) { console.log(z); }); }
