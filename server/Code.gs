@@ -1319,6 +1319,7 @@ function stundenzettelAuto() {
   zeilen_(T.MA).filter(function (m) { return m.rolle !== 'admin' && m.aktiv !== 'nein'; }).forEach(function (m) {
     monate.forEach(function (mo) {
       if (Date.now() - t0 > 4 * 60 * 1000) return; // Rest beim nächsten Lauf
+      if (istGesperrt_(m.id, mo)) return; // abgeschlossener Monat: Handkorrekturen bleiben unangetastet
       var L = lohnliste_(ich, { ma: m.id, monat: mo });
       if (!L.tage.some(function (t) { return t.zeilen.some(function (z) { return z.typ !== 'F'; }) || t.geld.length; })) return;
       var hash = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(L)));
