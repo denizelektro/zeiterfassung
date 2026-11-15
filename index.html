@@ -696,7 +696,8 @@ function rechnungDialog(id){
     h+='<label class="f">Hinweis für Claude (optional)</label><textarea class="eing" id="raNotiz" placeholder="z. B. Anfahrt pauschal 40 €"></textarea>'+
       '<p class="klein">„Rechnung anfordern“: Claude legt mit diesen Sätzen einen <b>Entwurf</b> in sevdesk an (nichts wird verschickt). Wenn der Kunde bar zahlt, reicht dir die Summe oben.</p>'+
       '<button class="gross b-gruen" onclick="rechnungVorschau()">👁 Vorschau für den Kunden</button><div style="height:10px"></div>'+
-      '<div id="fFehler"></div><button class="gross b-navy" id="raOk" onclick="rechnungAnfordern(\''+id+'\')">✓ Rechnung anfordern</button><div style="height:8px"></div>'+
+      '<div id="fFehler"></div><div class="reihe"><button class="gross b-navy" id="raOk" onclick="rechnungAnfordern(\''+id+'\',\'rechnung\')">🧾 Rechnung anfordern</button>'+
+      '<button class="gross b-blau" id="raAng" onclick="rechnungAnfordern(\''+id+'\',\'angebot\')">📝 Angebot anfordern</button></div><div style="height:8px"></div>'+
       (offen?'<button class="mittel b-hell" onclick="rechnungZurueck(\''+offen.id+'\',\''+id+'\')">Auftrag zurückziehen</button><div style="height:8px"></div>':'')+
       '<button class="mittel b-hell" onclick="bsSeite(\''+id+'\')">'+L('abbrechen')+'</button>';
     oeffneBlatt(h, true); raRechnen();
@@ -745,15 +746,16 @@ function rechnungVorschau(){
     '<div class="rvKnoepfe"><button class="mittel b-navy" style="color:#fff" onclick="window.print()">🖨 Drucken / als PDF speichern</button><button class="mittel b-hell" onclick="document.getElementById(\'rv\').remove()">← Zurück</button></div>';
   var d=document.createElement('div'); d.id='rv'; d.innerHTML=h; document.body.appendChild(d);
 }
-function rechnungAnfordern(id){
-  var b=$('raOk'); b.disabled=true; b.innerHTML='⏳ Übersicht wird erstellt…';
+function rechnungAnfordern(id, art){
+  art=art||'rechnung'; var b=$(art==='angebot'?'raAng':'raOk'), alt=b.innerHTML; b.disabled=true; b.innerHTML='⏳ …';
   var saetze={}; document.querySelectorAll('[data-ra="satz"]').forEach(function(el){ var v=zahl(el.value); if(v>0){ saetze[el.dataset.id]=v; LS.setItem('ze_satz_'+el.dataset.id, fmt2(v)); } });
   var w=RA&&RA.werte||{}, notiz=$('raNotiz').value+(w.spz?' · Stunden '+(w.spz>0?'+':'')+w.spz+' %':'')+(w.netto?' · App-Summe netto '+euro(w.netto)+' / brutto '+euro(w.brutto):'');
-  rufe('rechnungAuftrag',{baustelle:id, notiz:notiz, saetze:saetze, aufschlag:w.mpz==null?zahl(abAufschlag()):w.mpz}).then(function(r){
-    oeffneBlatt('<h2>✓ Rechnung angefordert</h2><p>'+fStd(r.offen)+' h ('+deD(r.von)+' – '+deD(r.bis)+') plus Material. Die Übersicht liegt in Drive unter „Rechn.-Angebot“.</p>'+
-      '<p class="klein">Schreib Claude einfach „Rechnung schreiben“ – dann wird der Entwurf in sevdesk angelegt.</p>'+
+  rufe('rechnungAuftrag',{baustelle:id, art:art, notiz:notiz, saetze:saetze, aufschlag:w.mpz==null?zahl(abAufschlag()):w.mpz}).then(function(r){
+    var wort=art==='angebot'?'Angebot':'Rechnung';
+    oeffneBlatt('<h2>✓ '+wort+' angefordert</h2><p>'+fStd(r.offen)+' h ('+deD(r.von)+' – '+deD(r.bis)+') plus Material. Die Übersicht liegt in Drive unter „Rechn.-Angebot“.</p>'+
+      '<p class="klein">Claude legt daraus beim nächsten Lauf (täglich 17:45 Uhr) einen '+wort+'s-Entwurf in sevdesk an (oder sofort, wenn du Claude schreibst „'+wort+' schreiben“). Nichts wird verschickt.</p>'+
       '<a class="mittel b-hell" style="text-decoration:none" href="'+r.datei+'" target="_blank">Übersicht öffnen</a><div style="height:8px"></div><button class="mittel b-navy" style="color:#fff" onclick="schliesseBlatt()">OK</button>');
-  }).catch(function(f){ b.disabled=false; b.innerHTML='✓ Rechnung anfordern'; fFehler(fehlerText(f)); });
+  }).catch(function(f){ b.disabled=false; b.innerHTML=alt; fFehler(fehlerText(f)); });
 }
 function rechnungZurueck(aid, id){ rufe('rechnungAuftragZurueck',{id:aid, baustelle:id}).then(function(){ toast('✓'); rechnungDialog(id); }).catch(function(f){ toast(fehlerText(f)); }); }
 function datumKurz(i){ return i.slice(8,10)+'.'+i.slice(5,7)+'.'; }
