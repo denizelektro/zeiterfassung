@@ -129,6 +129,7 @@
   .rvDatum{text-align:right;margin:10px 0} .rvTitel{font-size:18px;margin:6px 0 8px} .rvTaet{color:#444;margin-top:4px}
   .rvTab{width:100%;border-collapse:collapse;margin-top:14px} .rvTab th{border-bottom:2px solid #333;text-align:left;padding:5px 4px;font-size:12px} .rvTab td{border-bottom:1px solid #ddd;padding:5px 4px;vertical-align:top}
   .rvTab .r,.rvSum .r{text-align:right;white-space:nowrap} .rvSum{margin:12px 0 0 auto;min-width:60%;border-collapse:collapse} .rvSum td{padding:4px} .rvGes td{font-weight:700;border-top:2px solid #333;font-size:15px}
+  .rvRabatt td{color:#15803d;font-weight:700}
   .rvFuss{margin-top:30px;border-top:1px solid #ccc;padding-top:6px;font-size:9px;color:#555;text-align:center}
   .rvKnoepfe{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:10px;background:#fff;box-shadow:0 -2px 10px rgba(0,0,0,.1)}
   @media print{ body>*:not(#rv){display:none!important} #rv{position:static;background:#fff;padding:0} .rvKnoepfe{display:none} .rvBlatt{box-shadow:none} }
@@ -709,7 +710,7 @@ function raRechnen(){
   a.material.forEach(function(m){ var pz=m.aufschlag==null?mpz:m.aufschlag; matBr+=(m.ek||0)*(1+pz/100); });
   var mat=matBr/1.19, netto=lohn+mat, mwst=netto*0.19, brutto=netto+mwst;
   var ab=(a.status&&a.status.abschlag||[]).reduce(function(s,x){ return s+(x.betrag===''?0:zahl(x.betrag)); },0);
-  if($('raLohn')) $('raLohn').textContent=euro(lohn);
+  if($('raLohn')) $('raLohn').innerHTML=(spz?'<span class="klein" style="font-weight:400">'+(spz<0?'Nachlass ':'Aufschlag ')+euro(Math.abs(lohn-lohn/(1+spz/100)))+' · </span>':'')+euro(lohn);
   if($('raMat')) $('raMat').textContent=euro(mat);
   $('raSumme').innerHTML='<div class="zeileL"><span>Netto</span><b>'+euro(netto)+'</b></div><div class="zeileL"><span class="klein">+ 19 % MwSt.</span><span>'+euro(mwst)+'</span></div>'+
     '<div class="zeileL" style="font-size:1.25rem"><span><b>Brutto</b></span><b style="color:var(--navy)">'+euro(brutto)+'</b></div>'+
@@ -720,8 +721,10 @@ function raRechnen(){
 function rechnungVorschau(){
   if(!RA) return; raRechnen(); var a=RA.a, w=RA.werte, maR={}; (S.mitarbeiter||[]).forEach(function(m){ maR[m.id]=m; });
   var pos=[], n=0, e2=function(x){ return euro(Math.round(x*100)/100); };
-  document.querySelectorAll('[data-ra="satz"]').forEach(function(el){ var std=zahl(el.dataset.std), satz=zahl(el.value)*(1+w.spz/100); if(!std) return;
+  var lohnBasis=0;
+  document.querySelectorAll('[data-ra="satz"]').forEach(function(el){ var std=zahl(el.dataset.std), satz=zahl(el.value); if(!std) return; lohnBasis+=std*satz;
     var m=maR[el.dataset.id]||{}; pos.push({t:(m.rolle==='admin'?'Elektroniker, Bauleitung':'Elektroniker (Geselle)')+' – Arbeitszeit', menge:std, einh:'Std.', ep:satz}); });
+  if(w.spz) pos.push({t:(w.spz<0?'Nachlass ':'Aufschlag ')+String(Math.abs(w.spz)).replace('.',',')+' % auf die Arbeitszeit', menge:1, einh:'psch.', ep:lohnBasis*w.spz/100, rabatt:w.spz<0});
   a.material.forEach(function(m){ var pz=m.aufschlag==null?w.mpz:m.aufschlag, ges=(m.ek||0)*(1+pz/100)/1.19, mg=zahl(m.menge)||1;
     pos.push({t:m.text, menge:mg, einh:m.einheit||'Stk', ep:ges/mg}); });
   var tage=a.tage.filter(function(t){ return !t.rechnung; }).map(function(t){ return t.datum; }).sort();
@@ -733,7 +736,7 @@ function rechnungVorschau(){
     (tage.length?'<div>Leistungszeitraum: '+deD(tage[0])+' – '+deD(tage[tage.length-1])+'</div>':'')+
     (Object.keys(taet).length?'<div class="rvTaet">Ausgeführte Arbeiten: '+esc(Object.keys(taet).slice(0,12).join(', '))+'</div>':'')+
     '<table class="rvTab"><thead><tr><th>Pos.</th><th>Beschreibung</th><th class="r">Menge</th><th class="r">Einzelpreis</th><th class="r">Gesamt</th></tr></thead><tbody>'+
-    pos.map(function(p){ n++; return '<tr><td>'+n+'</td><td>'+esc(p.t)+'</td><td class="r">'+String(Math.round(p.menge*100)/100).replace('.',',')+' '+esc(p.einh)+'</td><td class="r">'+e2(p.ep)+'</td><td class="r">'+e2(p.ep*p.menge)+'</td></tr>'; }).join('')+
+    pos.map(function(p){ n++; return '<tr'+(p.rabatt?' class="rvRabatt"':'')+'><td>'+n+'</td><td>'+esc(p.t)+'</td><td class="r">'+String(Math.round(p.menge*100)/100).replace('.',',')+' '+esc(p.einh)+'</td><td class="r">'+e2(p.ep)+'</td><td class="r">'+e2(p.ep*p.menge)+'</td></tr>'; }).join('')+
     '</tbody></table><table class="rvSum"><tr><td>Summe netto</td><td class="r">'+e2(w.netto)+'</td></tr><tr><td>zzgl. 19 % MwSt.</td><td class="r">'+e2(w.netto*0.19)+'</td></tr>'+
     '<tr class="rvGes"><td>Gesamtbetrag brutto</td><td class="r">'+e2(w.brutto)+'</td></tr>'+
     ab.map(function(x){ return '<tr><td>abzüglich Abschlag '+esc(x.nr)+' (netto)</td><td class="r">− '+e2(x.betrag===''?0:zahl(x.betrag))+'</td></tr>'; }).join('')+
