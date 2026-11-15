@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Zeiterfassung</title>
 <meta name="theme-color" content="#1f3a5f">
 <meta name="mobile-web-app-capable" content="yes">
@@ -121,6 +121,8 @@
   .schleier.an{opacity:1;pointer-events:auto}
   .blatt{position:fixed;left:0;right:0;bottom:0;max-height:92vh;overflow:auto;background:var(--bg);border-radius:22px 22px 0 0;z-index:21;transform:translateY(105%);transition:transform .25s ease;padding:8px 14px calc(20px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto;-webkit-overflow-scrolling:touch}
   .blatt.an{transform:none}
+  .blatt{max-height:92dvh}
+  .blattFuss{position:sticky;bottom:calc(-20px - env(safe-area-inset-bottom));background:var(--bg);padding:8px 0 calc(28px + env(safe-area-inset-bottom));margin:0 -2px;z-index:2;box-shadow:0 -8px 12px -8px rgba(0,0,0,.15)}
   .blatt{overscroll-behavior:contain}
   html.blattOffen{overflow:hidden}
   .blatt h2{padding-right:40px}
@@ -914,7 +916,7 @@ function zeichneForm(){
       '<button class="mittel b-hell" style="min-height:44px" onclick="formLesen();F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">＋ '+L('matHinzu')+'</button>';
     h+='<label class="f">'+L('km','inl')+'</label><input type="number" inputmode="decimal" class="eing" id="fKm" value="'+(e.km===''||e.km==null?'':e.km)+'" placeholder="0">';
   }
-  h+='<div id="fFehler"></div><div style="height:14px"></div><button class="gross b-navy" onclick="formSpeichern()">💾 '+L('speichern')+'</button><div style="height:8px"></div>';
+  h+='<div id="fFehler"></div><div style="height:14px"></div><div class="blattFuss"><button class="gross b-navy" onclick="formSpeichern()">💾 '+L('speichern')+'</button></div><div style="height:8px"></div>';
   h+='<div class="reihe"><button class="mittel b-hell" onclick="schliesseBlatt(true)">'+L('abbrechen')+'</button>'+(e.id?'<button class="mittel" style="background:var(--rothell);color:var(--rot)" onclick="formLoeschen()">🗑 '+L('loeschen')+'</button>':'')+'</div>';
   oeffneBlatt(h, true);
 }
@@ -979,7 +981,7 @@ function zeichneMatForm(){
     ((e.belege||[]).length?'<div class="belege">'+e.belege.map(function(b,i){ return '<span>🧾 '+(adm?esc(b.name.replace(/\.(jpg|pdf)$/,'')):Lt('beleg')+' '+(i+1)+' ✓')+'</span>'; }).join('')+'</div>':'')+
     '<div id="fMat">'+e.material.map(matZeile).join('')+'</div>'+
     '<button class="mittel b-hell" style="min-height:44px" onclick="formLesen();F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">＋ '+L('matHinzu')+'</button>';
-  h+='<div id="fFehler"></div><div style="height:14px"></div><button class="gross b-navy" onclick="formSpeichern()">💾 '+L('speichern')+'</button><div style="height:8px"></div>'+
+  h+='<div id="fFehler"></div><div style="height:14px"></div><div class="blattFuss"><button class="gross b-navy" onclick="formSpeichern()">💾 '+L('speichern')+'</button></div><div style="height:8px"></div>'+
      '<button class="mittel b-hell" onclick="schliesseBlatt(true)">'+L('abbrechen')+'</button>';
   oeffneBlatt(h, true);
 }
