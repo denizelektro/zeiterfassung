@@ -106,7 +106,8 @@
   .filter button{flex:1;padding:9px 4px;border-radius:12px;background:#fff;font-weight:700;font-size:.85rem;color:var(--grau);border:2px solid transparent}
   .filter button.an.f-alle{border-color:var(--navy);color:var(--navy)} .filter button.an.f-U{background:var(--blauhell);color:var(--blau);border-color:var(--blau)} .filter button.an.f-K{background:var(--rothell);color:var(--rot);border-color:var(--rot)}
   .jliste .mon{font-weight:700;color:var(--navy);margin:10px 0 4px} .jliste .tage{display:flex;flex-wrap:wrap;gap:6px}
-  .tag.heute{box-shadow:0 0 0 3px var(--navy) inset}
+  .tag.heute{box-shadow:0 0 0 3px #7c3aed inset,0 0 0 2px #c4b5fd;background:#ede9fe;color:#5b21b6;font-weight:800}
+  .tag.heute.zu{background:var(--gruen);color:#fff}
   .tag.laufend::after{content:"";position:absolute;top:5px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--gelb);animation:puls 1.2s infinite}
   @keyframes puls{50%{opacity:.25}}
   .summe{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
