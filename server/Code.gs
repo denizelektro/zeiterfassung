@@ -108,6 +108,7 @@ var AKTIONEN = {
   abrechnung:     { admin: true, fn: function (ich, d) { return abrechnung_(d); } },
   abrechnungTabelle: { admin: true, fn: function (ich, d) { return abrechnungTabelle_(d); } },
   abrechnungMarkieren: { admin: true, fn: function (ich, d) { return abrechnungMarkieren_(d); } },
+  materialAendern: { admin: true, fn: function (ich, d) { return materialAendern_(d); } },
   rechnungAuftrag: { admin: true, fn: function (ich, d) { return rechnungAuftrag_(d); } },
   rechnungAuftraege: { admin: true, fn: function (ich, d) { return { liste: auftraege_(String(d.baustelle || '')) }; } },
   rechnungAuftragZurueck: { admin: true, fn: function (ich, d) { aktualisieren_(T.AU, String(d.id || ''), { status: 'zurückgezogen' }); return { liste: auftraege_(String(d.baustelle || '')) }; } },
@@ -1160,6 +1161,43 @@ function claudePreis_(d) {
   z.preis = Math.round(p * 100) / 100; z.quelle = String(d.quelle || 'Claude').slice(0, 200);
   aktualisieren_(T.E, e.id, { material: JSON.stringify(m), geaendert: jetzt_() });
   return { ok: true };
+}
+
+/* ---------- Material einer Baustelle aus der Abrechnung heraus ändern (Name, Menge, Einzelpreis, Händler) ---------- */
+function materialAendern_(d) {
+  kopfPruefen_(T.E);
+  var bs = String(d.baustelle || ''), alt = d.alt || {}, neu = d.neu || {};
+  var k = function (m) { return String(m.text || '').trim().toLowerCase() + '|' + (m.einheit || '') + '|' + String(m.haendler || '').toLowerCase(); };
+  var altK = k(alt), num = function (v) { var n = Number(String(v == null ? '' : v).replace(',', '.')); return isNaN(n) ? 0 : n; };
+  var treffer = [];   // [{e, m, i}]
+  zeilen_(T.E).filter(function (e) { return e.typ === 'A' && e.baustelle === bs && !e.rechnung; })
+    .sort(function (a, b) { return (a.datum + a.start) < (b.datum + b.start) ? -1 : 1; })
+    .forEach(function (e) { var m = []; try { m = JSON.parse(e.material || '[]'); } catch (x) {} m.forEach(function (z, i) { if (z && k(z) === altK) treffer.push({ e: e, m: m, i: i }); }); });
+  if (!treffer.length) throw new Error('Materialzeile nicht gefunden');
+  var nText = String(neu.text || alt.text || '').trim().slice(0, 120); if (!nText) throw new Error('Bezeichnung fehlt');
+  var summeAlt = treffer.reduce(function (a, t) { return a + num(t.m[t.i].menge); }, 0);
+  var summeNeu = neu.menge === '' || neu.menge == null ? summeAlt : num(neu.menge);
+  var ep = neu.ep === '' || neu.ep == null ? null : Math.round(num(neu.ep) * 100) / 100;
+  // Mengenänderung: Differenz beim letzten Tag verrechnen; reicht das nicht, alles auf den ersten Tag legen
+  var diff = Math.round((summeNeu - summeAlt) * 1000) / 1000, letzte = treffer[treffer.length - 1];
+  if (diff) {
+    var nl = num(letzte.m[letzte.i].menge) + diff;
+    if (nl > 0) letzte.m[letzte.i].menge = String(Math.round(nl * 1000) / 1000).replace('.', ',');
+    else { treffer.forEach(function (t, j) { t.m[t.i].menge = j === 0 ? String(summeNeu).replace('.', ',') : '0'; }); }
+  }
+  var geaendert = {};
+  treffer.forEach(function (t) {
+    var z = t.m[t.i];
+    z.text = nText; if (neu.einheit) z.einheit = String(neu.einheit).slice(0, 10);
+    if (neu.haendler != null) { if (neu.haendler) z.haendler = String(neu.haendler).slice(0, 40); else delete z.haendler; }
+    if (ep != null) { z.ep = ep; z.preis = Math.round(ep * (num(z.menge) || 0) * 100) / 100; delete z.quelle; }
+    else if (z.ep != null) z.preis = Math.round(num(z.ep) * (num(z.menge) || 0) * 100) / 100;
+    geaendert[t.e.id] = t;
+  });
+  Object.keys(geaendert).forEach(function (id) { var t = geaendert[id];
+    var m = t.m.filter(function (z) { return !(z && String(z.menge) === '0'); });
+    aktualisieren_(T.E, id, { material: JSON.stringify(m), geaendert: jetzt_() }); });
+  return { ok: true, zeilen: treffer.length };
 }
 
 /* ---------- „Rechnung schreiben“: Auftrag an Claude (Entwurf in sevdesk) ---------- */

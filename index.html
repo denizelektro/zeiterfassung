@@ -688,7 +688,7 @@ function rechnungDialog(id){
     h+='<div class="karte"><p class="titel">📦 Material</p>'+
       '<div class="zeileL" style="gap:6px"><span class="klein">Aufschlag für alle Zeilen</span><span style="display:flex;gap:6px;align-items:center"><label class="einh" style="width:84px"><input class="eing" id="raMatPz" inputmode="decimal" value="'+esc(abAufschlag())+'" oninput="raRechnen()" onblur="LS.setItem(\'ze_aufschlag\',this.value)"><span>%</span></label><button class="mittel b-hell" style="width:auto;padding:8px 10px;min-height:0" onclick="raAlleSetzen()">↓ alle</button></span></div>'+
       (a.material.length?a.material.map(function(m,mi){
-        return '<div class="zeileL"><div style="min-width:0"><b>'+esc(String(m.menge).replace('.',','))+' '+esc(m.einheit)+'</b> '+esc(m.text)+(m.haendler?' <span class="klein">· '+esc(m.haendler)+'</span>':'')+(m.ohnePreis||!m.ek?' <span class="pill p-gelb">Preis fehlt</span>':'')+
+        return '<div class="zeileL"><div style="min-width:0;cursor:pointer" onclick="raMatEdit('+mi+')"><span style="float:right;color:var(--grau)">✏️</span><b>'+esc(String(m.menge).replace('.',','))+' '+esc(m.einheit)+'</b> '+esc(m.text)+(m.haendler?' <span class="klein">· '+esc(m.haendler)+'</span>':'')+(m.ohnePreis||!m.ek?' <span class="pill p-gelb">Preis fehlt</span>':'')+
           '<div class="klein">EK '+euro(m.ek)+' → <b id="raMv'+mi+'"></b> netto</div></div>'+
           '<label class="einh" style="width:84px;flex:none"><input class="eing" data-ra="mpz" data-mi="'+mi+'" inputmode="decimal" placeholder="'+esc(abAufschlag())+'" value="'+(m.aufschlag==null?'':esc(String(m.aufschlag).replace('.',',')))+'" oninput="raRechnen()"><span>%</span></label></div>'; }).join(''):'<div class="leer">Kein Material</div>')+
       '<div class="zeileL"><span>Summe Material netto</span><b id="raMat"></b></div>'+(fehlt?'<div class="klein">⚠ '+fehlt+' Position(en) ohne Preis – zählen mit 0 €.</div>':'')+'</div>';
@@ -705,8 +705,35 @@ function rechnungDialog(id){
       '<button class="gross b-blau" id="raAng" onclick="rechnungAnfordern(\''+id+'\',\'angebot\')">📝 Angebot anfordern</button></div><div style="height:8px"></div>'+
       (offen?'<button class="mittel b-hell" onclick="rechnungZurueck(\''+offen.id+'\',\''+id+'\')">Auftrag zurückziehen</button><div style="height:8px"></div>':'')+
       '<button class="mittel b-hell" onclick="bsSeite(\''+id+'\')">'+L('abbrechen')+'</button>';
-    oeffneBlatt(h, true); raRechnen();
+    oeffneBlatt(h, true); raHalten(id); raRechnen();
   }).catch(function(f){ oeffneBlatt('<p>'+esc(fehlerText(f))+'</p>'); });
+}
+var RAK=null;   // Einstellungen merken, wenn man zwischendurch eine Materialzeile bearbeitet
+function raMerken(){ if(!RA) return; var mp={}; document.querySelectorAll('[data-ra="mpz"]').forEach(function(el){ var m=RA.a.material[+el.dataset.mi]; if(m) mp[m.text+'|'+m.einheit+'|'+(m.haendler||'')]=el.value; });
+  RAK={id:RA.id, std:($('raStdRab')||{}).value, mat:($('raMatRab')||{}).value, alle:($('raMatPz')||{}).value, notiz:($('raNotiz')||{}).value, mp:mp}; }
+function raHalten(id){ if(!RAK||RAK.id!==id) return; var k=RAK; RAK=null;
+  if($('raStdRab')) $('raStdRab').value=k.std||''; if($('raMatRab')) $('raMatRab').value=k.mat||''; if($('raMatPz')&&k.alle!=null) $('raMatPz').value=k.alle; if($('raNotiz')) $('raNotiz').value=k.notiz||'';
+  document.querySelectorAll('[data-ra="mpz"]').forEach(function(el){ var m=RA.a.material[+el.dataset.mi]; if(!m) return; var v=k.mp[m.text+'|'+m.einheit+'|'+(m.haendler||'')]; if(v!=null) el.value=v; }); }
+function raMatEdit(mi){
+  var m=RA.a.material[mi]; if(!m) return; raMerken(); var id=RA.id, ep=m.ek&&zahl(m.menge)?m.ek/zahl(m.menge):'';
+  var hl=(S.haendler||['Hornbach','Temo','Sonepar']).slice(); if(m.haendler&&hl.indexOf(m.haendler)<0) hl.push(m.haendler);
+  RA.edit=m;
+  oeffneBlatt('<h2>✏️ Material ändern</h2><p class="klein">Ändert die Zeile in den Einträgen dieser Baustelle (noch nicht abgerechnete Tage).</p>'+
+    '<label class="f">Bezeichnung</label><input class="eing" id="meText" value="'+esc(m.text)+'">'+
+    '<div class="reihe"><div><label class="f">Menge</label><input class="eing" id="meMenge" inputmode="decimal" value="'+esc(String(m.menge).replace('.',','))+'"></div>'+
+    '<div><label class="f">Einheit</label><select class="eing" id="meEinh">'+EINHEITEN.map(function(x){ return '<option '+(m.einheit===x[0]?'selected':'')+'>'+x[0]+'</option>'; }).join('')+'</select></div></div>'+
+    '<div class="reihe"><div><label class="f">Händler</label><select class="eing" id="meHd"><option value="">–</option>'+hl.map(function(x){ return '<option '+(m.haendler===x?'selected':'')+'>'+esc(x)+'</option>'; }).join('')+'</select></div>'+
+    '<div><label class="f">Einzelpreis brutto (EK)</label><label class="einh"><input class="eing" id="meEp" inputmode="decimal" value="'+esc(ep===''?'':fmt2(ep))+'" onblur="this.value=fmt2(this.value)"><span>€</span></label></div></div>'+
+    '<div id="fFehler"></div><div style="height:12px"></div><button class="gross b-navy" id="meOk" onclick="raMatSpeichern()">💾 Speichern</button><div style="height:8px"></div>'+
+    '<button class="mittel b-hell" onclick="rechnungDialog(\''+id+'\')">← Zurück ohne Ändern</button>', true);
+}
+function raMatSpeichern(){
+  var m=RA.edit, id=RA.id, b=$('meOk'); if(!$('meText').value.trim()) return fFehler('Bezeichnung fehlt');
+  b.disabled=true; b.innerHTML='⏳ …';
+  rufe('materialAendern',{baustelle:id, alt:{text:m.text, einheit:m.einheit, haendler:m.haendler||''},
+    neu:{text:$('meText').value.trim(), menge:$('meMenge').value, einheit:$('meEinh').value, haendler:$('meHd').value, ep:$('meEp').value}})
+    .then(function(){ try{ ladeMonat(S.nutzer.id, monatVon(heuteIso())).catch(function(){}); }catch(e){} toast('✓ geändert'); rechnungDialog(id); })
+    .catch(function(f){ b.disabled=false; b.innerHTML='💾 Speichern'; fFehler(fehlerText(f)); });
 }
 function raAlleSetzen(){ var v=($('raMatPz')||{}).value||''; document.querySelectorAll('[data-ra="mpz"]').forEach(function(el){ el.value=v; }); raRechnen(); }
 function raRechnen(){
