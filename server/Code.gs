@@ -517,6 +517,7 @@ function eintragSpeichern_(ich, d) {
       var o = { menge: String(m.menge || '').slice(0, 10), einheit: String(m.einheit || '').slice(0, 10), text: String(m.text).slice(0, 120) };
       if (m.haendler) o.haendler = String(m.haendler).slice(0, 40);
       if (m.quelle) o.quelle = String(m.quelle).slice(0, 200);
+      if (m.ep != null && m.ep !== '' && !isNaN(Number(String(m.ep).replace(',', '.')))) o.ep = Math.round(Number(String(m.ep).replace(',', '.')) * 100) / 100;
       var au = String(m.aufschlag == null ? '' : m.aufschlag).replace(',', '.').replace('+', '').trim();
       if (au !== '' && !isNaN(Number(au))) o.aufschlag = Math.round(Number(au) * 10) / 10;
       var p = String(m.preis == null ? '' : m.preis).replace(',', '.').trim();

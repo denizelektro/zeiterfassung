@@ -141,7 +141,8 @@
   .mat .eing{padding:11px 8px}
   .mat .x{color:var(--rot);font-size:20px}
   .mat{border-bottom:1px dashed #dde2e7;padding-bottom:6px}
-  .mat .mat2{grid-column:1/5;display:flex;gap:6px} .mat .mat2 .hd{flex:1.3;min-width:0} .mat .mat2 .au{width:66px;flex:none} .mat .mat2 .pr{flex:1;min-width:0} .mat .pInfo{grid-column:1/5;margin-top:-2px}
+  .mat .mat2{grid-column:1/5;display:flex;gap:6px} .mat .mat2 .hd{flex:1.3;min-width:0} .mat .mat2 .au{width:74px;flex:none} .mat .mat2 .pr{flex:1;min-width:0}
+  .einh{position:relative;display:block} .einh .eing{width:100%;padding-right:24px} .einh span{position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--grau);font-weight:700;pointer-events:none} .mat .pInfo{grid-column:1/5;margin-top:-2px}
   .mat .such{font-size:17px;color:inherit}
   .kiReihe{display:flex;gap:6px;margin-bottom:8px}
   .kiReihe button{flex:1;min-width:0;padding:10px 2px;border-radius:12px;background:#fff;border:1px solid #cfd5dc;font-weight:700;font-size:.85rem;line-height:1.15}
@@ -919,23 +920,25 @@ function zeichneForm(){
 function matZeile(m,i){
   var adm=S.nutzer.rolle==='admin', hl=S.haendler||['Hornbach','Temo','Sonepar'];
   if(m.haendler && hl.indexOf(m.haendler)<0) hl=hl.concat([m.haendler]);
-  return '<div class="mat"><input class="eing" inputmode="decimal" placeholder="'+(tr()?'Miktar':'Menge')+'" value="'+esc(m.menge)+'" data-i="'+i+'" data-k="menge">'+
+  return '<div class="mat"><input class="eing" inputmode="decimal" placeholder="'+(tr()?'Miktar':'Menge')+'" value="'+esc(m.menge)+'" data-i="'+i+'" data-k="menge" oninput="matVk('+i+')">'+
     '<select class="eing" data-i="'+i+'" data-k="einheit">'+EINHEITEN.map(function(x){return '<option value="'+x[0]+'" '+(m.einheit===x[0]?'selected':'')+'>'+(tr()&&x[1]!==x[0]?x[1]+' / ':'')+x[0]+'</option>';}).join('')+'</select>'+
     '<input class="eing" placeholder="'+(tr()?'NYM 3x1,5':'z. B. NYM 3x1,5')+'" value="'+esc(m.text)+'" data-i="'+i+'" data-k="text">'+
     '<button class="x" onclick="formLesen();F.material.splice('+i+',1);if(!F.material.length)F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">✕</button>'+
     '<div class="mat2"><select class="eing hd" data-i="'+i+'" data-k="haendler" onchange="haendlerGewaehlt(this,'+i+')"><option value="">'+(tr()?'Mağaza / ':'')+'Händler…</option>'+hl.map(function(x){ return '<option '+(m.haendler===x?'selected':'')+'>'+esc(x)+'</option>'; }).join('')+'<option value="+">＋ '+(tr()?'Yeni / ':'')+'Neu…</option></select>'+
-    (adm?'<input class="eing au" inputmode="text" placeholder="± %" value="'+(m.aufschlag==null?'':esc(String(m.aufschlag).replace('.',',')))+'" data-i="'+i+'" data-k="aufschlag" oninput="matVk('+i+')">':'')+
-    '<input class="eing pr" inputmode="decimal" placeholder="€ '+(adm?'EK ':'')+(tr()?'toplam':'gesamt')+'" value="'+(m.preis==null?'':esc(String(m.preis).replace('.',',')))+'" data-i="'+i+'" data-k="preis" oninput="matVk('+i+');var q=F.material['+i+'];if(q)delete q.quelle"></div>'+
-    (adm?'<div class="klein pInfo" id="vk'+i+'">'+matVkText(m.preis,m.aufschlag)+'</div>':'')+
+    '<label class="einh pr"><input class="eing" inputmode="decimal" placeholder="'+(tr()?'Birim fiyat':'Einzelpreis')+'" value="'+esc(matEp(m))+'" data-i="'+i+'" data-k="ep" oninput="matVk('+i+');var q=F.material['+i+'];if(q)delete q.quelle" onblur="this.value=fmt2(this.value)"><span>€</span></label>'+
+    (adm?'<label class="einh au"><input class="eing" inputmode="text" placeholder="±" value="'+(m.aufschlag==null?'':esc(String(m.aufschlag).replace('.',',')))+'" data-i="'+i+'" data-k="aufschlag" oninput="matVk('+i+')"><span>%</span></label>':'')+'</div>'+
+    '<div class="klein pInfo" id="vk'+i+'">'+matVkText(m.menge, matEp(m), adm?m.aufschlag:'')+'</div>'+
     (adm&&m.quelle?'<div class="klein pInfo">💡 '+esc(m.quelle)+'</div>':'')+
     (m.preisInfo?'<div class="klein pInfo">'+m.preisInfo+'</div>':'')+'</div>';
 }
-function matVkText(p,a){
-  var ek=zahl(p), au=String(a==null?'':a).replace('+','').trim(); if(!ek) return '';
-  var pz=au===''?0:zahl(au), vk=ek*(1+pz/100);
-  return '→ '+(pz?(pz>0?'+':'')+String(pz).replace('.',',')+' % = ':'')+'<b>'+euro(vk)+'</b> brutto · '+euro(vk/1.19)+' netto';
+function fmt2(v){ v=String(v==null?'':v).trim(); if(v==='') return ''; var n=zahl(v); return n.toFixed(2).replace('.',','); }
+function matEp(m){ if(m.ep!=null&&m.ep!=='') return typeof m.ep==='number'?fmt2(m.ep):m.ep; var p=zahl(m.preis), n=zahl(m.menge)||1; return p?fmt2(p/n):''; }
+function matVkText(menge, ep, a){
+  var e=zahl(ep), n=zahl(menge)||1; if(!e) return '';
+  var ek=e*n, au=String(a==null?'':a).replace('+','').trim(), pz=au===''?0:zahl(au), vk=ek*(1+pz/100);
+  return (tr()?'Toplam / ':'')+'Gesamt: '+String(n).replace('.',',')+' × '+euro(e)+' = <b>'+euro(ek)+'</b>'+(pz?' · '+(pz>0?'+':'')+String(pz).replace('.',',')+' % = <b style="color:var(--gruen)">'+euro(vk)+'</b>':'')+' brutto';
 }
-function matVk(i){ var row=document.querySelectorAll('#fMat .mat')[i]; if(!row) return; var p=row.querySelector('[data-k="preis"]'), a=row.querySelector('[data-k="aufschlag"]'), o=$('vk'+i); if(o) o.innerHTML=matVkText(p&&p.value, a&&a.value); }
+function matVk(i){ var row=document.querySelectorAll('#fMat .mat')[i]; if(!row) return; var g=function(k){ var el=row.querySelector('[data-k="'+k+'"]'); return el?el.value:''; }; var o=$('vk'+i); if(o) o.innerHTML=matVkText(g('menge'), g('ep'), g('aufschlag')); }
 function haendlerGewaehlt(sel,i){
   formLesen();
   if(sel.value==='+'){
@@ -1002,6 +1005,7 @@ function formLesen(){
   if(v('fBs')!==undefined) F.baustelle=v('fBs'); if(v('fStart')!==undefined) F.start=v('fStart'); if(v('fEnde')!==undefined) F.ende=v('fEnde');
   if(v('fPause')!==undefined) F.pause=+v('fPause')||0; if(v('fTaet')!==undefined) F.taetigkeit=v('fTaet'); if(v('fKm')!==undefined) F.km=v('fKm');
   document.querySelectorAll('#fMat [data-i]').forEach(function(el){ F.material[+el.dataset.i][el.dataset.k]=el.value; });
+  F.material.forEach(function(m){ if(m.ep===undefined) return; if(String(m.ep).trim()===''){ delete m.preis; return; } m.preis=Math.round(zahl(m.ep)*(zahl(m.menge)||1)*100)/100; });
 }
 function formSpeichern(){
   formLesen(); var e=JSON.parse(JSON.stringify(F));
@@ -1010,7 +1014,7 @@ function formSpeichern(){
     if(!e.baustelle) return fFehler(Lt('BAUSTELLE_FEHLT'));
     if(!e.start) return fFehler(Lt('beginn')+' ?');
     if(e.ende && minDiff(e.start,e.ende)<=0) return fFehler(Lt('ENDE_VOR_BEGINN'));
-    e.material=e.material.filter(function(m){return String(m.text||'').trim();}).map(function(m){ delete m.preisInfo; if(m.haendler==='+') delete m.haendler; if(m.aufschlag!=null){ var au=String(m.aufschlag).replace(',','.').replace('+','').trim(); if(au===''||isNaN(+au)) delete m.aufschlag; else m.aufschlag=+au; } if(m.preis!=null){ var p=String(m.preis).replace(',','.').trim(); if(p===''||isNaN(+p)) delete m.preis; else m.preis=+p; } return m; });
+    e.material=e.material.filter(function(m){return String(m.text||'').trim();}).map(function(m){ delete m.preisInfo; if(m.haendler==='+') delete m.haendler; if(m.ep!=null){ if(String(m.ep).trim()==='') delete m.ep; else m.ep=Math.round(zahl(m.ep)*100)/100; } if(m.aufschlag!=null){ var au=String(m.aufschlag).replace(',','.').replace('+','').trim(); if(au===''||isNaN(+au)) delete m.aufschlag; else m.aufschlag=+au; } if(m.preis!=null){ var p=String(m.preis).replace(',','.').trim(); if(p===''||isNaN(+p)) delete m.preis; else m.preis=+p; } return m; });
     e.km = e.km===''?'':String(e.km).replace(',','.');
   }
   var neu=!e.id; if(neu) e.id=uuid();
