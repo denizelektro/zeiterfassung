@@ -1331,7 +1331,7 @@ function listeClaude(){
       (m.link?'<a class="pill p-blau" href="'+esc(m.link)+'" target="_blank">📄 Bericht</a>':'')+
       (m.gelesen?'<span>✓ gelesen</span>':'<button class="pill p-gruen" onclick="claudeGelesen(\''+m.id+'\')">✓ Gelesen</button>')+'</span></div></div>'; }).join('');
 }
-function claudeGelesen(id,alle){ rufeRoh('claudeGelesen',alle?{alle:true}:{id:id}).then(function(d){ S.claudeNachr=d.liste; S.claudeUngelesen=d.ungelesen; listeClaude(); badgeAktualisieren(); }).catch(function(f){ toast(fehlerText(f)); }); }
+function claudeGelesen(id,alle){ (S.claudeNachr||[]).forEach(function(m){ if(alle||m.id===id) m.gelesen=true; }); S.claudeUngelesen=(S.claudeNachr||[]).filter(function(m){return !m.gelesen;}).length; listeClaude(); badgeAktualisieren(); toast('✓ Gelesen'); rufeRoh('claudeGelesen',alle?{alle:true}:{id:id}).then(function(d){ S.claudeNachr=d.liste; S.claudeUngelesen=d.ungelesen; listeClaude(); badgeAktualisieren(); }).catch(function(f){ toast(fehlerText(f)); }); }
 
 function zeigeNachrichten(){
   var h='<button class="gross b-navy" onclick="nachrichtForm()">✉️ '+L('neueNachricht')+'</button><div style="height:12px"></div>';
