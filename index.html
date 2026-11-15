@@ -634,6 +634,7 @@ function bsSeite(id){
   var mat={}; es.forEach(function(e){ (e.material||[]).forEach(function(m){ var k=(m.text||'').trim().toLowerCase()+'|'+(m.einheit||''); var z=mat[k]||(mat[k]={text:m.text,einheit:m.einheit,menge:0}); z.menge+=zahl(m.menge); }); });
   var mk=Object.keys(mat);
   if(mk.length) h+='<div class="karte" style="margin-top:10px"><p class="titel">📦 '+(tr()?'Toplam malzeme / ':'')+'Material bisher</p>'+mk.map(function(k){ var z=mat[k]; return '<div class="klein" style="padding:3px 0"><b>'+String(Math.round(z.menge*100)/100).replace('.',',')+' '+esc(z.einheit||'')+'</b> '+esc(z.text)+'</div>'; }).join('')+'</div>';
+  if(S.nutzer.rolle==='admin') h+='<div style="height:10px"></div><button class="mittel b-navy" style="color:#fff" onclick="rechnungDialog(\''+id+'\')">🧾 Rechnung schreiben</button>';
   h+='<p class="titel" style="margin:12px 0 6px">'+(tr()?'Son kayıtlar / ':'')+'Letzte Einträge</p>';
   h+= es.length ? es.slice(0,8).map(function(e){ return '<button class="eintrag" onclick="eintragForm(\''+e.id+'\')"><div class="k"><span class="bsn">'+datumKurz(e.datum)+'</span><span class="std">'+(e.ende?fStd(std(e))+' h':'● '+e.start)+'</span></div>'+
       (e.taetigkeit?'<div class="taet">'+esc(e.taetigkeit)+'</div>':'')+(e.material&&e.material.length?'<div class="klein">📦 '+e.material.length+' '+(tr()?'malzeme':'Material')+'</div>':'')+'</button>'; }).join('')
@@ -644,6 +645,35 @@ function bsManuell(id){ S.auswahlBs=id; LS.setItem('ze_letzteBs',id);
   var e=bsEintraege(id).filter(function(x){ return x.datum===heuteIso(); })[0];
   if(e) return eintragForm(e.id);
   eintragForm(null, heuteIso()); F.baustelle=id; zeichneForm(); }
+/* „Rechnung schreiben“ (nur Chef): alles Offene bis heute als Auftrag an Claude → Entwurf in sevdesk */
+function rechnungDialog(id){
+  oeffneBlatt('<h2>🧾 Rechnung schreiben</h2><div class="lade" style="min-height:100px">…</div>');
+  Promise.all([rufe('abrechnung',{baustelle:id, von:'2000-01-01', bis:heuteIso()}), rufe('rechnungAuftraege',{baustelle:id})]).then(function(r){
+    var a=r[0], au=r[1].liste, st=a.status||{offen:0,abschlag:[]}, offen=au.filter(function(x){ return x.status==='offen'; })[0];
+    var tage=a.tage.filter(function(t){ return !t.rechnung; }).map(function(t){ return t.datum; }).sort();
+    var h='<h2>🧾 Rechnung schreiben</h2><div class="klein" style="margin:-6px 0 10px">'+esc(a.baustelle.name)+'</div>';
+    h+='<div class="karte"><div class="zeileL"><span>⚪ <b>Offen</b>'+(tage.length?' · '+deD(tage[0])+' – '+deD(tage[tage.length-1]):'')+'</span><b>'+fStd(st.offen)+' h</b></div>'+
+       (a.material.length?'<div class="klein">📦 '+a.material.length+' Material-Position(en)'+(a.material.some(function(m){return m.ohnePreis;})?' · einige ohne Preis':'')+'</div>':'')+
+       st.abschlag.map(function(x){ return '<div class="klein">🟡 Abschlag '+esc(x.nr)+(x.betrag!==''?' · '+euro(x.betrag):'')+' wird abgezogen</div>'; }).join('')+'</div>';
+    if(offen) h+='<div class="hinweis">⏳ Schon angefordert am '+esc(offen.erstellt.slice(8,10)+'.'+offen.erstellt.slice(5,7)+'. '+offen.erstellt.slice(11,16))+' ('+fStd(offen.stunden)+' h). Neu anfordern ersetzt diesen Auftrag.</div>';
+    if(!st.offen) h+='<p>Bei dieser Baustelle ist nichts mehr offen.</p>';
+    else h+='<label class="f">Hinweis für Claude (optional)</label><textarea class="eing" id="raNotiz" placeholder="z. B. Anfahrt pauschal 40 €, Rabatt …"></textarea>'+
+      '<p class="klein">Claude legt daraus in sevdesk einen <b>Entwurf</b> an (Stundensätze 63 € / 55 € – Claude fragt vorher nach). Nichts wird gespeichert oder verschickt, bis du es selbst tust.</p>'+
+      '<div id="fFehler"></div><button class="gross b-navy" id="raOk" onclick="rechnungAnfordern(\''+id+'\')">✓ Rechnung anfordern</button><div style="height:8px"></div>';
+    h+=(offen?'<button class="mittel b-hell" onclick="rechnungZurueck(\''+offen.id+'\',\''+id+'\')">Auftrag zurückziehen</button><div style="height:8px"></div>':'')+'<button class="mittel b-hell" onclick="bsSeite(\''+id+'\')">'+L('abbrechen')+'</button>';
+    oeffneBlatt(h, true);
+  }).catch(function(f){ oeffneBlatt('<p>'+esc(fehlerText(f))+'</p>'); });
+}
+function rechnungAnfordern(id){
+  var b=$('raOk'); b.disabled=true; b.innerHTML='⏳ Übersicht wird erstellt…';
+  var saetze={}; (S.mitarbeiter||[]).forEach(function(m){ var v=zahl(abSatz(m.id)); if(v>0) saetze[m.id]=v; });
+  rufe('rechnungAuftrag',{baustelle:id, notiz:$('raNotiz').value, saetze:saetze, aufschlag:zahl(abAufschlag())}).then(function(r){
+    oeffneBlatt('<h2>✓ Rechnung angefordert</h2><p>'+fStd(r.offen)+' h ('+deD(r.von)+' – '+deD(r.bis)+') plus Material. Die Übersicht liegt in Drive unter „Rechn.-Angebot“.</p>'+
+      '<p class="klein">Schreib Claude einfach „Rechnung schreiben“ – dann wird der Entwurf in sevdesk angelegt.</p>'+
+      '<a class="mittel b-hell" style="text-decoration:none" href="'+r.datei+'" target="_blank">Übersicht öffnen</a><div style="height:8px"></div><button class="mittel b-navy" style="color:#fff" onclick="schliesseBlatt()">OK</button>');
+  }).catch(function(f){ b.disabled=false; b.innerHTML='✓ Rechnung anfordern'; fFehler(fehlerText(f)); });
+}
+function rechnungZurueck(aid, id){ rufe('rechnungAuftragZurueck',{id:aid, baustelle:id}).then(function(){ toast('✓'); rechnungDialog(id); }).catch(function(f){ toast(fehlerText(f)); }); }
 function datumKurz(i){ return i.slice(8,10)+'.'+i.slice(5,7)+'.'; }
 function bsErfassen(id, was){
   S.auswahlBs=id;

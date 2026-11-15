@@ -26,6 +26,7 @@ var T = {
   E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert', 'belege', 'abfahrt', 'ankunft', 'uebern', 'rechnung'] },
   RE:  { name: 'Rechnungen',  kopf: ['id', 'baustelle', 'nr', 'art', 'datum', 'von', 'bis', 'betrag', 'stunden', 'erstellt'] },
   TAG: { name: 'Abschluesse', kopf: ['ma', 'datum', 'zeit'] },
+  AU:  { name: 'Rechnungsauftraege', kopf: ['id', 'baustelle', 'von', 'bis', 'stunden', 'saetze', 'aufschlag', 'datei', 'erstellt', 'status', 'notiz'] },
   SP:  { name: 'Monatssperren', kopf: ['ma', 'monat', 'zeit', 'tabelleId', 'pdfId'] }
 };
 
@@ -106,6 +107,9 @@ var AKTIONEN = {
   abrechnung:     { admin: true, fn: function (ich, d) { return abrechnung_(d); } },
   abrechnungTabelle: { admin: true, fn: function (ich, d) { return abrechnungTabelle_(d); } },
   abrechnungMarkieren: { admin: true, fn: function (ich, d) { return abrechnungMarkieren_(d); } },
+  rechnungAuftrag: { admin: true, fn: function (ich, d) { return rechnungAuftrag_(d); } },
+  rechnungAuftraege: { admin: true, fn: function (ich, d) { return { liste: auftraege_(String(d.baustelle || '')) }; } },
+  rechnungAuftragZurueck: { admin: true, fn: function (ich, d) { aktualisieren_(T.AU, String(d.id || ''), { status: 'zurückgezogen' }); return { liste: auftraege_(String(d.baustelle || '')) }; } },
   abrechnungLoesen: { admin: true, fn: function (ich, d) { return abrechnungLoesen_(d); } },
   baustelleNeu:   { fn: function (ich, d) { return baustelleNeu_(ich, d); } },
   meldungFoto:    { ohneLock: true, fn: function (ich, d) { return meldungFoto_(ich, d); } },
@@ -1096,6 +1100,29 @@ function abrechnung_(d) {
     rechnungen: Object.keys(rech).map(function (k) { var r = rech[k]; return { nr: r.nr, art: r.art, datum: r.datum, von: r.von, bis: r.bis, betrag: r.betrag, stunden: r.stunden }; })
       .sort(function (a, b) { return a.datum < b.datum ? -1 : 1; })
   };
+}
+
+/* ---------- „Rechnung schreiben“: Auftrag an Claude (Entwurf in sevdesk) ---------- */
+function auftraege_(bsId) {
+  return zeilen_(T.AU).filter(function (a) { return !bsId || a.baustelle === bsId; })
+    .map(function (a) { return { id: a.id, baustelle: a.baustelle, name: bsName_(a.baustelle), von: a.von, bis: a.bis, stunden: Number(a.stunden || 0), erstellt: a.erstellt, status: a.status, datei: a.datei, notiz: a.notiz }; })
+    .sort(function (a, b) { return a.erstellt < b.erstellt ? 1 : -1; });
+}
+function rechnungAuftrag_(d) {
+  var bs = finde_(T.BS, String(d.baustelle || '')); if (!bs) throw new Error('Baustelle wählen');
+  var offen = zeilen_(T.E).filter(function (e) { return e.typ === 'A' && e.baustelle === bs.id && !e.rechnung; }).map(eintragAus_);
+  if (!offen.length) throw new Error('Keine offenen Stunden bei dieser Baustelle');
+  var von = offen.map(function (e) { return e.datum; }).sort()[0], bis = heute_();
+  // Stundensätze: was im Abrechnungs-Fenster eingetragen ist, sonst Chef 63 € / Mitarbeiter 55 € (vor dem Schreiben wird nachgefragt)
+  var saetze = {}; zeilen_(T.MA).forEach(function (m) { var v = d.saetze && Number(d.saetze[m.id]); saetze[m.id] = v > 0 ? v : (m.rolle === 'admin' ? 63 : 55); });
+  var auf = d.aufschlag == null || d.aufschlag === '' ? 30 : Number(d.aufschlag);
+  var t = abrechnungTabelle_({ baustelle: bs.id, von: von, bis: bis, saetze: saetze, aufschlag: auf });
+  var a = abrechnung_({ baustelle: bs.id, von: von, bis: bis });
+  // offene Aufträge derselben Baustelle ersetzen
+  zeilen_(T.AU).filter(function (x) { return x.baustelle === bs.id && x.status === 'offen'; }).forEach(function (x) { aktualisieren_(T.AU, x.id, { status: 'ersetzt' }); });
+  schreiben_(T.AU, { id: Utilities.getUuid().slice(0, 8), baustelle: bs.id, von: von, bis: bis, stunden: a.status.offen, saetze: JSON.stringify(saetze), aufschlag: auf,
+    datei: t.url, erstellt: jetzt_(), status: 'offen', notiz: String(d.notiz || '').slice(0, 300) });
+  return { liste: auftraege_(bs.id), offen: a.status.offen, von: von, bis: bis, datei: t.url };
 }
 
 /* ---------- Abrechnungs-Status: Einträge als berechnet markieren ---------- */
