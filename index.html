@@ -240,7 +240,7 @@ var TX = {
   pauseBisher:['Mola','Pause'], navi:['Yol tarifi','Navigation'], offenTage:['Kapatılmamış gün','Offene Tage'],
   sprechen:['Konuş','Sprechen'], reise:['Yol','Reise'], reiseLang:['Kendi arabamla','Fahrt mit eigenem Auto'],
   abfahrt:['Evden çıkış','Abfahrt von zu Hause'], ankunft:['Eve varış','Ankunft zu Hause'], kmGes:['Toplam km (gidiş + dönüş)','Kilometer gesamt (hin + zurück)'],
-  uebern:['Konaklama (eve dönmedim)','Übernachtung (nicht nach Hause)'], jetzt:['şimdi','jetzt'], uu:['Ücretsiz izin','Unbez. Urlaub'], geldNeu:['Para aldım','Geld bekommen'], betrag:['Tutar €','Betrag €'], mListe:['Aylık liste','Monatsliste'], belegKasse:['Fiş / fatura','Kassenzettel / Rechnung'], belegScan:['Tarama / PDF seç','Scan / PDF auswählen'], matManuell:['Elle','Manuell'], belegMat:['Malzeme / barkod','Material / Barcode'], matFoto:['Malzeme foto','Material-Foto'], fotoDoku:['Fotoğraf','Foto'], mListeKnopf:['Saat listesi ve para','Stundenzettel & Geld'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
+  uebern:['Konaklama (eve dönmedim)','Übernachtung (nicht nach Hause)'], jetzt:['şimdi','jetzt'], uu:['Ücretsiz izin','Unbez. Urlaub'], geldNeu:['Para aldım','Geld bekommen'], betrag:['Tutar €','Betrag €'], mListe:['Aylık liste','Monatsliste'], belegKasse:['Fiş / fatura','Kassenzettel / Rechnung'], belegScan:['Tarama / PDF seç','Scan / PDF auswählen'], matManuell:['Ekle','Hinzufügen'], belegMat:['Malzeme / barkod','Material / Barcode'], matFoto:['Malzeme foto','Material-Foto'], fotoDoku:['Fotoğraf','Foto'], mListeKnopf:['Saat listesi ve para','Stundenzettel & Geld'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
   mGezahlt:['Ödenen maaş','Lohn ausgezahlt'], mVorschuss:['Avans','Vorschuss'], mRest:['Kalan','Rest'], mSchuld:['Borç','Schuld'], mGuthaben:['Alacak','Guthaben'], ergaenzen:['Düzenle','Ergänzen'], aufmass:['Ölçü','Aufmaß'],
   amTippen:['Daireyi noktaya getir, ＋ bas','Kreis auf den Punkt richten und ＋ drücken'], amSuchen:['Telefonu yavaşça sağa sola hareket ettirin…','Handy langsam hin und her bewegen – Kamera nicht abdecken'], amPunkt:['Nokta','Punkt setzen'],
   amUebernehmen:['Kaydet','Übernehmen'], amNeu:['Yeni çizgi','Neue Linie'], amZurueck:['Geri','Zurück'], amGesamt:['Toplam','Gesamt'], foto:['Fotoğraf','Foto'], beleg:['Fiş / Fatura','Beleg'], stopp:['Bitir','Fertig'],
@@ -644,14 +644,11 @@ function bsManuell(id){ S.auswahlBs=id; LS.setItem('ze_letzteBs',id);
   eintragForm(null, heuteIso()); F.baustelle=id; zeichneForm(); }
 function datumKurz(i){ return i.slice(8,10)+'.'+i.slice(5,7)+'.'; }
 function bsErfassen(id, was){
-  var heute=heuteIso(), l=S.laufend;
-  var e = (l && l.baustelle===id) ? findeEintrag(l.id) : bsEintraege(id).filter(function(x){ return x.datum===heute; })[0];
   S.auswahlBs=id;
-  if(e) eintragForm(e.id); else { eintragForm(null, heute); F.baustelle=id; zeichneForm(); }
+  if(!matForm(id)) return;
   if(was==='sprache') kiSprache('material');
   else if(was==='foto'||was==='beleg'||was==='scan') kiBild(was);
   else if(was==='mass') aufmass();
-  else setTimeout(function(){ var el=$('fMat'); if(el) el.scrollIntoView({block:'center'}); },150);
 }
 function stempel(art, bs){
   var ld=S.laufend&&/^\d{4}-\d{2}-\d{2}$/.test(S.laufend.datum)?S.laufend.datum:heuteIso();
@@ -845,6 +842,7 @@ function eintragForm(id, datum){
   zeichneForm();
 }
 function zeichneForm(){
+  if(F && F.nurMat) return zeichneMatForm();
   var e=F, h='<h2>'+L(e.id?'eintragBearb':'eintragNeu')+'</h2>';
   if(e.rechnung) h+='<div class="hinweis">'+(S.nutzer.rolle==='admin'?(e.rArt==='A'?'🟡 Per Abschlag ':'🟢 Schon ')+'abgerechnet ('+esc(e.rechnung)+'). Änderungen hier ändern die Rechnung in sevdesk nicht.':'🔒 '+Lt('ABGERECHNET'))+'</div>';
   if(e.typ!=='A') h+='<div class="seg">'+['A','U','K','UU'].map(function(t){ return '<button class="'+(e.typ===t?'an':'')+'" onclick="formLesen();F.typ=\''+t+'\';zeichneForm()">'+L(t==='A'?'arbeit':t==='U'?'urlaub':t==='K'?'krank':'uu')+'</button>'; }).join('')+'</div>';
@@ -876,6 +874,47 @@ function zeichneForm(){
   h+='<div id="fFehler"></div><div style="height:14px"></div><button class="gross b-navy" onclick="formSpeichern()">💾 '+L('speichern')+'</button><div style="height:8px"></div>';
   h+='<div class="reihe"><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>'+(e.id?'<button class="mittel" style="background:var(--rothell);color:var(--rot)" onclick="formLoeschen()">🗑 '+L('loeschen')+'</button>':'')+'</div>';
   oeffneBlatt(h, true);
+}
+/* Nur Material zu einem vorhandenen Arbeitstag dieser Baustelle erfassen */
+function zeichneMatForm(){
+  var e=F, adm=S.nutzer.rolle==='admin', tage=bsEintraege(e.baustelle).slice(0,20);
+  var wt=function(x){ var d=new Date(x.datum+'T12:00:00'), i=(d.getDay()+6)%7; return (tr()?TR_KURZ[i]+' / ':'')+DE_KURZ[i]+' '+datumKurz(x.datum)+' · '+x.start+'–'+(x.ende||'…'); };
+  var h='<h2>＋ '+L('material')+'</h2><div class="klein" style="margin:-6px 0 8px">🏗 '+esc(bsName(e.baustelle))+'</div>';
+  if(e.rechnung) h+='<div class="hinweis">'+(adm?'🟢 Schon abgerechnet ('+esc(e.rechnung)+')':'🔒 '+Lt('ABGERECHNET'))+'</div>';
+  h+='<label class="f">'+(tr()?'Gün / ':'')+'Tag</label><select class="eing" id="mfTag" onchange="matFormTag(this.value)">'+tage.map(function(x){ return '<option value="'+x.id+'" '+(x.id===e.id?'selected':'')+'>'+wt(x)+'</option>'; }).join('')+'</select>';
+  h+='<div class="kiReihe" style="margin-top:12px">'+
+      '<button id="kiB_material" onclick="kiSprache(\'material\')">🎤 '+L('sprechen')+'</button>'+
+      '<button id="kiB_foto" onclick="kiBild(\'foto\')">🏷 '+L('matFoto')+'</button>'+
+      '<button id="kiB_beleg" onclick="kiBild(\'beleg\')">🧾 '+L('beleg')+'</button>'+
+      '<button id="kiB_mass" onclick="aufmass()">📏 '+L('aufmass')+'</button></div>'+
+    ((e.belege||[]).length?'<div class="belege">'+e.belege.map(function(b,i){ return '<span>🧾 '+(adm?esc(b.name.replace(/\.(jpg|pdf)$/,'')):Lt('beleg')+' '+(i+1)+' ✓')+'</span>'; }).join('')+'</div>':'')+
+    '<div id="fMat">'+e.material.map(function(m,i){
+      return '<div class="mat'+(adm?' mp':'')+'"><input class="eing" inputmode="decimal" placeholder="'+(tr()?'Miktar':'Menge')+'" value="'+esc(m.menge)+'" data-i="'+i+'" data-k="menge">'+
+        '<select class="eing" data-i="'+i+'" data-k="einheit">'+EINHEITEN.map(function(x){return '<option value="'+x[0]+'" '+(m.einheit===x[0]?'selected':'')+'>'+(tr()&&x[1]!==x[0]?x[1]+' / ':'')+x[0]+'</option>';}).join('')+'</select>'+
+        '<input class="eing" placeholder="'+(tr()?'NYM 3x1,5':'z. B. NYM 3x1,5')+'" value="'+esc(m.text)+'" data-i="'+i+'" data-k="text">'+
+        (adm?'<input class="eing" inputmode="decimal" placeholder="€" value="'+(m.preis==null?'':esc(String(m.preis).replace('.',',')))+'" data-i="'+i+'" data-k="preis">':'')+
+        '<button class="x" onclick="formLesen();F.material.splice('+i+',1);if(!F.material.length)F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">✕</button></div>'; }).join('')+'</div>'+
+    '<button class="mittel b-hell" style="min-height:44px" onclick="formLesen();F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">＋ '+L('matHinzu')+'</button>';
+  h+='<div id="fFehler"></div><div style="height:14px"></div><button class="gross b-navy" onclick="formSpeichern()">💾 '+L('speichern')+'</button><div style="height:8px"></div>'+
+     '<button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>';
+  oeffneBlatt(h, true);
+}
+function matFormTag(id){ formLesen(); var neu=findeEintrag(id); if(!neu) return; matForm(neu.baustelle, id); }
+/** Material-Maske öffnen: laufender oder heutiger Eintrag, sonst der letzte Tag dieser Baustelle */
+function matForm(bsId, eid){
+  var l=S.laufend, liste=bsEintraege(bsId), heute=heuteIso();
+  var e = eid ? findeEintrag(eid) : (l&&l.baustelle===bsId&&findeEintrag(l.id)) || liste.filter(function(x){ return x.datum===heute; })[0] || liste[0];
+  if(!e){
+    oeffneBlatt('<h2>＋ '+L('material')+'</h2><p>'+(tr()?'Bu şantiyede henüz çalışma kaydı yok. Önce işe başlayın veya saati elle girin.<br><span class="klein">':'')+'Für diese Baustelle gibt es noch keinen Arbeitstag. Bitte zuerst Arbeit beginnen oder die Zeit manuell eintragen.'+(tr()?'</span>':'')+'</p>'+
+      (!l?'<button class="gross b-gruen" onclick="schliesseBlatt();stempel(\'beginn\',\''+bsId+'\')">▶ '+L('beginnen')+'</button><div style="height:8px"></div>':'')+
+      '<button class="mittel b-navy" style="color:#fff" onclick="bsManuell(\''+bsId+'\')">✏️ '+L('manuell')+'</button>');
+    return false;
+  }
+  F=JSON.parse(JSON.stringify(e)); F.nurMat=true;
+  if(!F.material) F.material=[];
+  F.material=F.material.filter(function(m){ return String(m.text||'').trim()||String(m.menge||'').trim(); });
+  F.material.push({menge:'',einheit:'Stk',text:''});
+  zeichneForm(); return true;
 }
 function formLesen(){
   if(!F) return; var v=function(id){ var el=$(id); return el?el.value:undefined; };
@@ -922,11 +961,10 @@ function kiFehler(f){ toast(f&&f.fehler&&/^KI: /.test(f.fehler)?'KI: '+(tr()?'ha
 function laufendKi(was){
   var l=S.laufend; if(!l) return;
   if(!findeEintrag(l.id)) return toast('…');
-  eintragForm(l.id);
+  matForm(l.baustelle, l.id);
   if(was==='sprache') kiSprache('material');
   else if(was==='foto'||was==='beleg'||was==='scan') kiBild(was);
   else if(was==='mass') aufmass();
-  else setTimeout(function(){ var el=$('fMat'); if(el) el.scrollIntoView({block:'center'}); },150);
 }
 /* Beleg: Kassenzettel (wird abgelegt + ausgelesen) oder Material/Barcode (nur erkennen) */
 function belegWahl(fn, id){
