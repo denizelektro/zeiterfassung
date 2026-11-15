@@ -138,7 +138,7 @@
   .mat .x{color:var(--rot);font-size:20px}
   .mat.mp{grid-template-columns:54px 70px 1fr 66px 30px}
   .kiReihe{display:flex;gap:6px;margin-bottom:8px}
-  .kiReihe button{flex:1;padding:10px 4px;border-radius:12px;background:#fff;border:1px solid #cfd5dc;font-weight:700;font-size:.85rem;line-height:1.15}
+  .kiReihe button{flex:1;min-width:0;padding:10px 2px;border-radius:12px;background:#fff;border:1px solid #cfd5dc;font-weight:700;font-size:.85rem;line-height:1.15}
   .kiReihe button.rec,.mikro.rec{background:var(--rot);color:#fff;border-color:var(--rot);animation:puls 1.2s infinite}
   .kiReihe button.ki,.mikro.ki{background:var(--gelbhell);color:#7a4a00}
   .kiReihe .zw .de{font-size:.72rem}
@@ -240,7 +240,7 @@ var TX = {
   pauseBisher:['Mola','Pause'], navi:['Yol tarifi','Navigation'], offenTage:['Kapatılmamış gün','Offene Tage'],
   sprechen:['Konuş','Sprechen'], reise:['Yol','Reise'], reiseLang:['Kendi arabamla','Fahrt mit eigenem Auto'],
   abfahrt:['Evden çıkış','Abfahrt von zu Hause'], ankunft:['Eve varış','Ankunft zu Hause'], kmGes:['Toplam km (gidiş + dönüş)','Kilometer gesamt (hin + zurück)'],
-  uebern:['Konaklama (eve dönmedim)','Übernachtung (nicht nach Hause)'], jetzt:['şimdi','jetzt'], uu:['Ücretsiz izin','Unbez. Urlaub'], geldNeu:['Para aldım','Geld bekommen'], betrag:['Tutar €','Betrag €'], mListe:['Aylık liste','Monatsliste'], belegKasse:['Fiş / fatura','Kassenzettel / Rechnung'], belegScan:['Tarama / PDF seç','Scan / PDF auswählen'], belegMat:['Malzeme / barkod','Material / Barcode'], matFoto:['Malzeme foto','Material-Foto'], fotoDoku:['Fotoğraf','Foto'], mListeKnopf:['Saat listesi ve para','Stundenzettel & Geld'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
+  uebern:['Konaklama (eve dönmedim)','Übernachtung (nicht nach Hause)'], jetzt:['şimdi','jetzt'], uu:['Ücretsiz izin','Unbez. Urlaub'], geldNeu:['Para aldım','Geld bekommen'], betrag:['Tutar €','Betrag €'], mListe:['Aylık liste','Monatsliste'], belegKasse:['Fiş / fatura','Kassenzettel / Rechnung'], belegScan:['Tarama / PDF seç','Scan / PDF auswählen'], matManuell:['Elle','Manuell'], belegMat:['Malzeme / barkod','Material / Barcode'], matFoto:['Malzeme foto','Material-Foto'], fotoDoku:['Fotoğraf','Foto'], mListeKnopf:['Saat listesi ve para','Stundenzettel & Geld'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
   mGezahlt:['Ödenen maaş','Lohn ausgezahlt'], mVorschuss:['Avans','Vorschuss'], mRest:['Kalan','Rest'], mSchuld:['Borç','Schuld'], mGuthaben:['Alacak','Guthaben'], ergaenzen:['Düzenle','Ergänzen'], aufmass:['Ölçü','Aufmaß'],
   amTippen:['Daireyi noktaya getir, ＋ bas','Kreis auf den Punkt richten und ＋ drücken'], amSuchen:['Telefonu yavaşça sağa sola hareket ettirin…','Handy langsam hin und her bewegen – Kamera nicht abdecken'], amPunkt:['Nokta','Punkt setzen'],
   amUebernehmen:['Kaydet','Übernehmen'], amNeu:['Yeni çizgi','Neue Linie'], amZurueck:['Geri','Zurück'], amGesamt:['Toplam','Gesamt'], foto:['Fotoğraf','Foto'], beleg:['Fiş / Fatura','Beleg'], stopp:['Bitir','Fertig'],
@@ -438,6 +438,8 @@ function navKnopf(id, ikon){ return '<button class="'+(S.ansicht===id?'an':'')+'
 function gehe(id){ S.ansicht=id; if(id==='kalender'){ S.kalMonat = S.kalMonat||monatVon(heuteIso()); } render(); window.scrollTo(0,0); }
 function menue(){
   oeffneBlatt('<h2>'+esc(S.nutzer.name)+'</h2>'+
+    '<button class="mittel b-hell" onclick="schliesseBlatt();gehe(\'heute\')">🕒 '+(tr()?'<b>Çalışma saati</b>&nbsp;/ Arbeitszeit':'Arbeitszeit')+'</button><div style="height:10px"></div>'+
+    '<button class="mittel b-hell" onclick="abwesenheitForm(S.nutzer.id)">🏖 '+(tr()?'<b>İzin / hasta / ücretsiz</b>&nbsp;/ Urlaub, krank, unbezahlt':'Urlaub · Krank · Unbezahlt')+'</button><div style="height:10px"></div>'+
     '<button class="mittel b-hell" onclick="oeffneBlatt(\'<div id=&quot;pushKarte&quot;></div>\');pushKarte()">🔔 '+(tr()?'<b>Bildirimler</b>&nbsp;/ Benachrichtigungen':'Benachrichtigungen einrichten')+'</button><div style="height:10px"></div>'+
     '<button class="mittel b-hell" onclick="location.reload()">↻ '+(tr()?'<b>Yenile</b>&nbsp;/ Neu laden':'Neu laden')+'</button><div style="height:10px"></div>'+
     '<button class="mittel b-rot" style="color:#fff" onclick="abmelden()">'+L('abmelden')+'</button>');
@@ -621,6 +623,7 @@ function bsSeite(id){
      (!l?'<button class="mittel b-gruen" style="color:#fff" onclick="schliesseBlatt();stempel(\'beginn\',\''+id+'\')">▶ '+L('beginnen')+'</button>':'')+
      '<button class="mittel b-navy" style="color:#fff" onclick="bsManuell(\''+id+'\')">✏️ '+L('manuell')+'</button></div>';
   h+='<p class="titel" style="margin:6px 0">'+L('material')+' / '+L('taetigkeit')+'</p><div class="kiReihe">'+
+     '<button onclick="bsErfassen(\''+id+'\',\'form\')">＋ '+L('matManuell')+'</button>'+
      '<button onclick="bsErfassen(\''+id+'\',\'sprache\')">🎤 '+L('sprechen')+'</button>'+
      '<button onclick="belegWahl(\'bsErfassen\',\''+id+'\')">🧾 '+L('beleg')+'</button>'+
      '<button onclick="bsErfassen(\''+id+'\',\'mass\')">📏 '+L('aufmass')+'</button>'+
@@ -844,7 +847,7 @@ function eintragForm(id, datum){
 function zeichneForm(){
   var e=F, h='<h2>'+L(e.id?'eintragBearb':'eintragNeu')+'</h2>';
   if(e.rechnung) h+='<div class="hinweis">'+(S.nutzer.rolle==='admin'?(e.rArt==='A'?'🟡 Per Abschlag ':'🟢 Schon ')+'abgerechnet ('+esc(e.rechnung)+'). Änderungen hier ändern die Rechnung in sevdesk nicht.':'🔒 '+Lt('ABGERECHNET'))+'</div>';
-  h+='<div class="seg">'+['A','U','K','UU'].map(function(t){ return '<button class="'+(e.typ===t?'an':'')+'" onclick="formLesen();F.typ=\''+t+'\';zeichneForm()">'+L(t==='A'?'arbeit':t==='U'?'urlaub':t==='K'?'krank':'uu')+'</button>'; }).join('')+'</div>';
+  if(e.typ!=='A') h+='<div class="seg">'+['A','U','K','UU'].map(function(t){ return '<button class="'+(e.typ===t?'an':'')+'" onclick="formLesen();F.typ=\''+t+'\';zeichneForm()">'+L(t==='A'?'arbeit':t==='U'?'urlaub':t==='K'?'krank':'uu')+'</button>'; }).join('')+'</div>';
   h+='<label class="f">'+L('datum','inl')+'</label><input type="date" class="eing" id="fDatum" value="'+e.datum+'">';
   if(e.typ==='A'){
     var laeuft = e.id && !e.ende && S.laufend && S.laufend.id===e.id;
@@ -1133,8 +1136,9 @@ function bildKlein(datei, max){
   });
 }
 
-function abwesenheitForm(){
-  var h='<h2>'+L('abwesend')+'</h2><div class="seg" id="abwTyp"><button class="an" data-t="U" onclick="abwTyp(this)">🏖 '+L('urlaub')+'</button><button data-t="K" onclick="abwTyp(this)">🤒 '+L('krank')+'</button><button data-t="UU" onclick="abwTyp(this)">⏸ '+L('uu')+'</button></div>'+
+var AWMA=null;
+function abwesenheitForm(ma){ AWMA=ma||null;
+  var h='<h2>'+L('abwesend')+(ma&&S.nutzer.rolle==='admin'?' · '+esc(S.nutzer.name):'')+'</h2><div class="seg" id="abwTyp"><button class="an" data-t="U" onclick="abwTyp(this)">🏖 '+L('urlaub')+'</button><button data-t="K" onclick="abwTyp(this)">🤒 '+L('krank')+'</button><button data-t="UU" onclick="abwTyp(this)">⏸ '+L('uu')+'</button></div>'+
     '<div class="reihe"><div><label class="f">'+L('von','inl')+'</label><input type="date" class="eing" id="aVon" value="'+heuteIso()+'"></div><div><label class="f">'+L('bis','inl')+'</label><input type="date" class="eing" id="aBis" value="'+heuteIso()+'"></div></div>'+
     '<p class="klein">'+(tr()?'Hafta sonu ve resmi tatiller otomatik atlanır.<br>':'')+'Wochenenden und Feiertage werden automatisch übersprungen.</p>'+
     '<div id="fFehler"></div><button class="gross b-blau" onclick="abwSpeichern()">💾 '+L('speichern')+'</button><div style="height:8px"></div><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>';
@@ -1144,7 +1148,7 @@ function abwTyp(b){ document.querySelectorAll('#abwTyp button').forEach(function
 function abwSpeichern(){
   var typ=document.querySelector('#abwTyp .an').dataset.t, von=$('aVon').value, bis=$('aBis').value;
   if(!von||!bis||bis<von) return fFehler(Lt('ENDE_VOR_BEGINN'));
-  rufe('abwesenheit',{ma:S.ma||S.nutzer.id, typ:typ, von:von, bis:bis}).then(function(m){ monatSetzen(m);
+  rufe('abwesenheit',{ma:AWMA||S.ma||S.nutzer.id, typ:typ, von:von, bis:bis}).then(function(m){ monatSetzen(m);
     var bisM=monatVon(bis); if(bisM!==monatVon(von)) delete S.monate[schl(m.ma,bisM)];
     S.uebersicht=null; schliesseBlatt(); toast('✓'); render(); }).catch(function(f){ fFehler(fehlerText(f)); });
 }
