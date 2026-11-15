@@ -690,6 +690,7 @@ function rechnungDialog(id){
         return '<div class="zeileL"><div><b>'+esc(String(m.menge).replace('.',','))+' '+esc(m.einheit)+'</b> '+esc(m.text)+(m.haendler?' <span class="klein">· '+esc(m.haendler)+'</span>':'')+(m.ohnePreis||!m.ek?' <span class="pill p-gelb">Preis fehlt</span>':'')+'</div>'+
           '<div style="text-align:right;white-space:nowrap" class="klein">EK '+euro(m.ek)+(m.aufschlag!=null?'<br>'+(m.aufschlag>=0?'+':'')+String(m.aufschlag).replace('.',',')+' %':'')+'</div></div>'; }).join(''):'<div class="leer">Kein Material</div>')+
       '<div class="zeileL"><span class="klein">Aufschlag für Zeilen ohne eigenes %</span><label class="einh" style="width:90px"><input class="eing" id="raMatPz" inputmode="text" value="'+esc(abAufschlag())+'" oninput="raRechnen()" onblur="LS.setItem(\'ze_aufschlag\',this.value)"><span>%</span></label></div>'+
+      '<div class="zeileL"><span class="klein">Nachlass auf Material</span><label class="einh" style="width:90px"><input class="eing" id="raMatRab" inputmode="text" placeholder="0" oninput="raRechnen()"><span>%</span></label></div>'+
       '<div class="zeileL"><span>Summe Material netto</span><b id="raMat"></b></div>'+(fehlt?'<div class="klein">⚠ '+fehlt+' Position(en) ohne Preis – zählen mit 0 €.</div>':'')+'</div>';
     // Ergebnis
     h+='<div class="karte" id="raSumme" style="text-align:right"></div>';
@@ -709,14 +710,14 @@ function raRechnen(){
   var spz=zahl(String(($('raStdPz')||{}).value||'').replace('+','')); lohn=lohn*(1+spz/100);
   var mpz=zahl(String(($('raMatPz')||{}).value||'').replace('+','')), matBr=0;
   a.material.forEach(function(m){ var pz=m.aufschlag==null?mpz:m.aufschlag; matBr+=(m.ek||0)*(1+pz/100); });
-  var mat=matBr/1.19, netto=lohn+mat, mwst=netto*0.19, brutto=netto+mwst;
+  var mrab=Math.abs(zahl(String(($('raMatRab')||{}).value||''))), matVoll=matBr/1.19, mat=matVoll*(1-mrab/100), netto=lohn+mat, mwst=netto*0.19, brutto=netto+mwst;
   var ab=(a.status&&a.status.abschlag||[]).reduce(function(s,x){ return s+(x.betrag===''?0:zahl(x.betrag)); },0);
   if($('raLohn')) $('raLohn').innerHTML=(spz?'<span class="klein" style="font-weight:400">'+(spz<0?'Nachlass ':'Aufschlag ')+euro(Math.abs(lohn-lohn/(1+spz/100)))+' · </span>':'')+euro(lohn);
-  if($('raMat')) $('raMat').textContent=euro(mat);
+  if($('raMat')) $('raMat').innerHTML=(mrab?'<span class="klein" style="font-weight:400">Nachlass '+euro(matVoll-mat)+' · </span>':'')+euro(mat);
   $('raSumme').innerHTML='<div class="zeileL"><span>Netto</span><b>'+euro(netto)+'</b></div><div class="zeileL"><span class="klein">+ 19 % MwSt.</span><span>'+euro(mwst)+'</span></div>'+
     '<div class="zeileL" style="font-size:1.25rem"><span><b>Brutto</b></span><b style="color:var(--navy)">'+euro(brutto)+'</b></div>'+
     (ab?'<div class="zeileL"><span class="klein">− bereits gezahlte Abschläge (netto)</span><span>'+euro(ab)+'</span></div><div class="zeileL"><span><b>Noch zu zahlen brutto</b></span><b>'+euro((netto-ab)*1.19)+'</b></div>':'');
-  RA.werte={lohn:lohn, mat:mat, netto:netto, brutto:brutto, spz:spz, mpz:mpz};
+  RA.werte={lohn:lohn, mat:mat, matVoll:matVoll, mrab:mrab, netto:netto, brutto:brutto, spz:spz, mpz:mpz};
 }
 /* Vorschau wie ein Schreiben an den Kunden (Unverbindliche Kostenaufstellung), druckbar als PDF */
 function rechnungVorschau(){
@@ -728,6 +729,7 @@ function rechnungVorschau(){
   if(w.spz) pos.push({t:(w.spz<0?'Nachlass ':'Aufschlag ')+String(Math.abs(w.spz)).replace('.',',')+' % auf die Arbeitszeit', menge:1, einh:'psch.', ep:lohnBasis*w.spz/100, rabatt:w.spz<0});
   a.material.forEach(function(m){ var pz=m.aufschlag==null?w.mpz:m.aufschlag, ges=(m.ek||0)*(1+pz/100)/1.19, mg=zahl(m.menge)||1;
     pos.push({t:m.text, menge:mg, einh:m.einheit||'Stk', ep:ges/mg}); });
+  if(w.mrab) pos.push({t:'Nachlass '+String(w.mrab).replace('.',',')+' % auf das Material', menge:1, einh:'psch.', ep:-(w.matVoll-w.mat), rabatt:true});
   var tage=a.tage.filter(function(t){ return !t.rechnung; }).map(function(t){ return t.datum; }).sort();
   var taet={}; a.tage.forEach(function(t){ if(t.taetigkeit) taet[t.taetigkeit]=1; });
   var ab=(a.status&&a.status.abschlag||[]);
@@ -749,7 +751,7 @@ function rechnungVorschau(){
 function rechnungAnfordern(id, art){
   art=art||'rechnung'; var b=$(art==='angebot'?'raAng':'raOk'), alt=b.innerHTML; b.disabled=true; b.innerHTML='⏳ …';
   var saetze={}; document.querySelectorAll('[data-ra="satz"]').forEach(function(el){ var v=zahl(el.value); if(v>0){ saetze[el.dataset.id]=v; LS.setItem('ze_satz_'+el.dataset.id, fmt2(v)); } });
-  var w=RA&&RA.werte||{}, notiz=$('raNotiz').value+(w.spz?' · Stunden '+(w.spz>0?'+':'')+w.spz+' %':'')+(w.netto?' · App-Summe netto '+euro(w.netto)+' / brutto '+euro(w.brutto):'');
+  var w=RA&&RA.werte||{}, notiz=$('raNotiz').value+(w.spz?' · Stunden '+(w.spz>0?'+':'')+w.spz+' %':'')+(w.mrab?' · Material -'+w.mrab+' %':'')+(w.netto?' · App-Summe netto '+euro(w.netto)+' / brutto '+euro(w.brutto):'');
   rufe('rechnungAuftrag',{baustelle:id, art:art, notiz:notiz, saetze:saetze, aufschlag:w.mpz==null?zahl(abAufschlag()):w.mpz}).then(function(r){
     var wort=art==='angebot'?'Angebot':'Rechnung';
     oeffneBlatt('<h2>✓ '+wort+' angefordert</h2><p>'+fStd(r.offen)+' h ('+deD(r.von)+' – '+deD(r.bis)+') plus Material. Die Übersicht liegt in Drive unter „Rechn.-Angebot“.</p>'+
