@@ -120,6 +120,8 @@ var AKTIONEN = {
   lohnlisteDateien:{ admin: true, fn: function (ich, d) { return lohnlisteDateien_(ich, d); } },
   importEintraege:{ admin: true, fn: function (ich, d) { return importEintraege_(d); } },
   kiSchluessel:   { admin: true, fn: function (ich, d) { return kiSchluessel_(d); } },
+  haendlerNeu:    { fn: function (ich, d) { return haendlerNeu_(d); } },
+  kiPreis:        { admin: true, ohneLock: true, fn: function (ich, d) { return kiPreis_(d); } },
   kiDiagnose:     { admin: true, ohneLock: true, fn: function (ich, d) { return kiDiagnose_(d); } },
   claude:         { admin: true, ohneLock: true, fn: function (ich, d) { return claudeListe_(); } },
   claudeGelesen:  { admin: true, ohneLock: true, fn: function (ich, d) { return claudeGelesen_(d); } }
@@ -160,10 +162,41 @@ function kiConfig_(modell) {
   else c.thinkingConfig = { thinkingLevel: 'low' };
   return c;
 }
+/* ---------- Händler (Hornbach, Temo, Sonepar …) ---------- */
+function haendlerListe_() {
+  var l = null; try { l = JSON.parse(PropertiesService.getScriptProperties().getProperty('HAENDLER') || 'null'); } catch (x) {}
+  return l && l.length ? l : ['Hornbach', 'Temo', 'Sonepar'];
+}
+function haendlerNeu_(d) {
+  var n = String(d.name || '').replace(/\s+/g, ' ').trim().slice(0, 40); if (!n) throw new Error('Name fehlt');
+  var l = haendlerListe_();
+  if (!l.some(function (x) { return x.toLowerCase() === n.toLowerCase(); })) { l.push(n); PropertiesService.getScriptProperties().setProperty('HAENDLER', JSON.stringify(l)); }
+  return { haendler: l, name: haendlerName_(n) };
+}
+/** Händlername vom Kassenbon auf die Liste abbilden (z. B. "HORNBACH Baumarkt AG" → Hornbach). */
+function haendlerName_(n) {
+  var k = String(n || '').toLowerCase(); if (!k) return '';
+  var t = haendlerListe_().filter(function (x) { return k.indexOf(x.toLowerCase()) >= 0; })[0];
+  return t || String(n).slice(0, 40);
+}
+/** Aktuellen Online-Preis suchen (Gemini mit Google-Suche). Nur Chef. */
+function kiPreis_(d) {
+  var text = String(d.text || '').trim(), h = String(d.haendler || '').trim();
+  if (!text) throw new Error('Artikel fehlt');
+  var menge = Number(String(d.menge || '1').replace(',', '.')) || 1;
+  var frage = 'Suche den aktuellen Preis im Online-Shop von ' + (h || 'einem deutschen Baumarkt/Elektrogroßhandel') + ' (Deutschland) für diesen Artikel: "' + text + '"' +
+    (d.einheit ? ' (Einheit: ' + d.einheit + ')' : '') + '. Nimm das am besten passende Produkt. ' +
+    'Antworte NUR mit JSON: {"einzelpreis":Bruttopreis pro ' + (d.einheit || 'Stk') + ' als Zahl,"produkt":"genaue Produktbezeichnung","url":"Link zur Produktseite","sicher":true/false}. Wenn nichts gefunden: {"einzelpreis":null}.';
+  var r = kiFrage_([{ text: frage }], { suche: true });
+  var ep = Number(String(r.einzelpreis == null ? '' : r.einzelpreis).replace(',', '.'));
+  if (!(ep > 0)) return { gefunden: false };
+  return { gefunden: true, einzel: Math.round(ep * 100) / 100, gesamt: Math.round(ep * menge * 100) / 100, produkt: String(r.produkt || '').slice(0, 120), url: String(r.url || ''), sicher: r.sicher !== false };
+}
 function kiAktiv_() { return !!PropertiesService.getScriptProperties().getProperty('KI_KEY'); }
 
 /** Schickt Teile (Text/Bild/Audio) an Gemini und gibt das JSON der Antwort zurück. */
-function kiFrage_(teile) {
+function kiFrage_(teile, opt) {
+  opt = opt || {};
   var key = PropertiesService.getScriptProperties().getProperty('KI_KEY');
   if (!key) throw new Error('KI_FEHLT');
   var letzter = '';
@@ -172,8 +205,9 @@ function kiFrage_(teile) {
     var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + KI_MODELLE[i] + ':generateContent', {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true,
       headers: { 'x-goog-api-key': key },
-      payload: JSON.stringify({ contents: [{ role: 'user', parts: teile }],
-        generationConfig: kiConfig_(KI_MODELLE[i]) })
+      payload: JSON.stringify(opt.suche
+        ? { contents: [{ role: 'user', parts: teile }], tools: [{ google_search: {} }], generationConfig: { temperature: 0.1 } }
+        : { contents: [{ role: 'user', parts: teile }], generationConfig: kiConfig_(KI_MODELLE[i]) })
     });
     var code = r.getResponseCode(), txt = r.getContentText();
     console.log('KI ' + KI_MODELLE[i] + ' → ' + code + ' in ' + (Date.now() - t0) + ' ms');
@@ -181,6 +215,7 @@ function kiFrage_(teile) {
       var j = JSON.parse(txt), c = j.candidates && j.candidates[0];
       var t = c && c.content && c.content.parts ? c.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
       t = t.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+      if (opt.suche) { var mm = t.match(/\{[\s\S]*\}/); t = mm ? mm[0] : '{}'; }
       return JSON.parse(t || '{}');
     }
     letzter = code + ' ' + txt.slice(0, 200);
@@ -206,6 +241,7 @@ function matSauber_(liste) {
   return (liste || []).filter(function (m) { return m && String(m.text || '').trim(); }).slice(0, 30).map(function (m) {
     var e = String(m.einheit || 'Stk'); if (['Stk', 'm', 'Pkt', 'Rolle', 'kg', 'Sack'].indexOf(e) < 0) e = 'Stk';
     var o = { menge: m.menge == null ? '' : String(m.menge).replace('.', ','), einheit: e, text: String(m.text).trim().slice(0, 120) };
+    if (m.haendler) o.haendler = String(m.haendler).slice(0, 40);
     if (m.preis != null && m.preis !== '' && !isNaN(Number(m.preis))) o.preis = Math.round(Number(m.preis) * 100) / 100;
     return o;
   });
@@ -255,7 +291,8 @@ function belegHochladen_(ich, d) {
     try {
       var r = kiFrage_([{ text: KI_ROLLE + 'Das ist ein Kassenbon oder eine Rechnung über Material-Einkauf. Lies die gekauften Positionen ab. ' +
         'Antworte als JSON: {"haendler":"Name des Geschäfts","summe":Gesamtbetrag brutto als Zahl,"material":[{"menge":Zahl,"einheit":eine von ' + KI_EINHEITEN + ',"text":"verständliche deutsche Bezeichnung","preis":Gesamtpreis der Position brutto als Zahl}]}. Nichts erfinden.' }, teil]);
-      aus.material = matSauber_(r.material); aus.summe = r.summe || ''; aus.haendler = String(r.haendler || '');
+      aus.haendler = haendlerName_(String(r.haendler || ''));
+      aus.material = matSauber_((r.material || []).map(function (m) { if (m && aus.haendler) m.haendler = aus.haendler; return m; })); aus.summe = r.summe || '';
       f.setDescription((aus.haendler ? aus.haendler + ' · ' : '') + (aus.summe ? aus.summe + ' €' : ''));
     } catch (x) { aus.kiFehler = String(x.message || x); }
   }
@@ -353,7 +390,8 @@ function startDaten_(ich) {
     baustellen: zeilen_(T.BS).filter(function (b) { return b.aktiv !== 'nein' && (!b.fuer || b.fuer === ich.id); }).map(function (b) { return { id: b.id, name: b.name, adresse: b.adresse }; }),
     heute: heute_(),
     ungelesen: ungelesen_(ich),
-    kiAktiv: kiAktiv_()
+    kiAktiv: kiAktiv_(),
+    haendler: haendlerListe_()
   };
   if (ich.rolle === 'admin') {
     try { r.claudeUngelesen = claudeZahl_(); } catch (x) { r.claudeUngelesen = 0; }
@@ -469,6 +507,7 @@ function eintragSpeichern_(ich, d) {
   var material = (e.material || []).filter(function (m) { return m && String(m.text || '').trim(); })
     .map(function (m) {
       var o = { menge: String(m.menge || '').slice(0, 10), einheit: String(m.einheit || '').slice(0, 10), text: String(m.text).slice(0, 120) };
+      if (m.haendler) o.haendler = String(m.haendler).slice(0, 40);
       var p = String(m.preis == null ? '' : m.preis).replace(',', '.').trim();
       if (p !== '' && !isNaN(Number(p))) o.preis = Math.round(Number(p) * 100) / 100;
       return o;
@@ -1036,8 +1075,8 @@ function abrechnung_(d) {
     p.stunden += h; p.tage[e.datum] = 1;
     km += Number(e.km || 0);
     (e.material || []).forEach(function (m) {
-      var k = String(m.text).trim().toLowerCase() + '|' + (m.einheit || '');
-      var z = mat[k] || (mat[k] = { text: String(m.text).trim(), einheit: m.einheit || '', menge: 0, ek: 0, ohnePreis: false });
+      var k = String(m.text).trim().toLowerCase() + '|' + (m.einheit || '') + '|' + String(m.haendler || '').toLowerCase();
+      var z = mat[k] || (mat[k] = { text: String(m.text).trim(), einheit: m.einheit || '', haendler: m.haendler || '', menge: 0, ek: 0, ohnePreis: false });
       var n = Number(String(m.menge || '').replace(',', '.')); z.menge += isNaN(n) ? 0 : n;
       if (m.preis != null && m.preis !== '') z.ek += Number(m.preis); else z.ohnePreis = true;
     });
@@ -1148,7 +1187,7 @@ function abrechnungTabelle_(d) {
   z.push(['', '', '', '', '', '']);
   z.push(['MATERIAL', 'Menge', 'Einheit', 'EK gesamt', 'VK netto (+' + Math.round(auf * 100) + ' %)', 'Hinweis']);
   var matStart = z.length + 1;
-  a.material.forEach(function (m) { var r = z.length + 1; z.push([m.text, m.menge, m.einheit, m.ek || '', '=D' + r + '*' + (1 + auf), m.ohnePreis ? 'Preis fehlt' : '']); });
+  a.material.forEach(function (m) { var r = z.length + 1; z.push([m.text, m.menge, m.einheit, m.ek || '', '=D' + r + '*' + (1 + auf), [m.haendler, m.ohnePreis ? 'Preis fehlt' : ''].filter(String).join(' · ')]); });
   var matEnde = z.length;
   z.push(['Summe Material', '', '', a.material.length ? '=SUM(D' + matStart + ':D' + matEnde + ')' : 0, a.material.length ? '=SUM(E' + matStart + ':E' + matEnde + ')' : 0, '']);
   var matSumme = z.length;
@@ -1330,6 +1369,8 @@ function stundenzettelAuto() {
   });
 }
 /** Einmal im Editor ausführen: richtet den stündlichen Auslöser ein. */
+/** Test im Editor: Online-Preis-Suche */
+function kiPreisTest() { console.log(JSON.stringify(kiPreis_({ text: 'Wago 221-413 Verbindungsklemme', menge: 10, einheit: 'Stk', haendler: 'Hornbach' }))); }
 function automatikEinrichten() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'stundenzettelAuto') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('stundenzettelAuto').timeBased().everyHours(1).create();
