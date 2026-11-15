@@ -682,16 +682,18 @@ function rechnungDialog(id){
     h+='<div class="karte"><p class="titel">⏱ Arbeitszeit</p>'+a.personen.map(function(p){ var m=maRolle[p.id]||{id:p.id,rolle:''};
       return '<div class="zeileL"><div><b>'+esc(p.name)+'</b><div class="klein">'+fStd(p.stunden)+' Std. · '+p.tage+' Tag(e)</div></div>'+
         '<label class="einh" style="width:104px"><input class="eing" inputmode="decimal" data-ra="satz" data-id="'+p.id+'" data-std="'+p.stunden+'" value="'+esc(fmt2(raSatz(m)))+'" oninput="raRechnen()" onblur="this.value=fmt2(this.value);LS.setItem(\'ze_satz_'+p.id+'\',this.value);raRechnen()"><span>€/h</span></label></div>'; }).join('')+
-      '<div class="zeileL"><span class="klein">Auf-/Abschlag auf Stunden</span><label class="einh" style="width:90px"><input class="eing" id="raStdPz" inputmode="text" placeholder="±" oninput="raRechnen()"><span>%</span></label></div>'+
       '<div class="zeileL"><span>Summe Arbeitszeit netto</span><b id="raLohn"></b></div></div>';
     // Material
     var fehlt=a.material.filter(function(m){ return m.ohnePreis||!m.ek; }).length;
     h+='<div class="karte"><p class="titel">📦 Material</p>'+(a.material.length?a.material.map(function(m){
         return '<div class="zeileL"><div><b>'+esc(String(m.menge).replace('.',','))+' '+esc(m.einheit)+'</b> '+esc(m.text)+(m.haendler?' <span class="klein">· '+esc(m.haendler)+'</span>':'')+(m.ohnePreis||!m.ek?' <span class="pill p-gelb">Preis fehlt</span>':'')+'</div>'+
           '<div style="text-align:right;white-space:nowrap" class="klein">EK '+euro(m.ek)+(m.aufschlag!=null?'<br>'+(m.aufschlag>=0?'+':'')+String(m.aufschlag).replace('.',',')+' %':'')+'</div></div>'; }).join(''):'<div class="leer">Kein Material</div>')+
-      '<div class="zeileL"><span class="klein">Aufschlag für Zeilen ohne eigenes %</span><label class="einh" style="width:90px"><input class="eing" id="raMatPz" inputmode="text" value="'+esc(abAufschlag())+'" oninput="raRechnen()" onblur="LS.setItem(\'ze_aufschlag\',this.value)"><span>%</span></label></div>'+
-      '<div class="zeileL"><span class="klein">Nachlass auf Material</span><label class="einh" style="width:90px"><input class="eing" id="raMatRab" inputmode="text" placeholder="0" oninput="raRechnen()"><span>%</span></label></div>'+
+      '<div class="zeileL"><span class="klein">Aufschlag auf Material (für Zeilen ohne eigenes %)</span><label class="einh" style="width:90px"><input class="eing" id="raMatPz" inputmode="text" value="'+esc(abAufschlag())+'" oninput="raRechnen()" onblur="LS.setItem(\'ze_aufschlag\',this.value)"><span>%</span></label></div>'+
       '<div class="zeileL"><span>Summe Material netto</span><b id="raMat"></b></div>'+(fehlt?'<div class="klein">⚠ '+fehlt+' Position(en) ohne Preis – zählen mit 0 €.</div>':'')+'</div>';
+    // Nachlass (wie in sevdesk: offizielle Werte oben, Nachlass als eigene Zeilen)
+    h+='<div class="karte"><p class="titel">🏷 Nachlass</p>'+
+      '<div class="zeileL"><span>Nachlass auf Arbeitszeit</span><label class="einh" style="width:90px"><input class="eing" id="raStdRab" inputmode="decimal" placeholder="0" oninput="raRechnen()"><span>%</span></label></div><div class="klein" id="raStdRabB" style="text-align:right;color:var(--gruen)"></div>'+
+      '<div class="zeileL"><span>Nachlass auf Material</span><label class="einh" style="width:90px"><input class="eing" id="raMatRab" inputmode="decimal" placeholder="0" oninput="raRechnen()"><span>%</span></label></div><div class="klein" id="raMatRabB" style="text-align:right;color:var(--gruen)"></div></div>';
     // Ergebnis
     h+='<div class="karte" id="raSumme" style="text-align:right"></div>';
     h+='<label class="f">Hinweis für Claude (optional)</label><textarea class="eing" id="raNotiz" placeholder="z. B. Anfahrt pauschal 40 €"></textarea>'+
@@ -707,14 +709,16 @@ function rechnungDialog(id){
 function raRechnen(){
   if(!RA) return; var a=RA.a, lohn=0;
   document.querySelectorAll('[data-ra="satz"]').forEach(function(el){ lohn+=zahl(el.dataset.std)*zahl(el.value); });
-  var spz=zahl(String(($('raStdPz')||{}).value||'').replace('+','')); lohn=lohn*(1+spz/100);
+  var lohnVoll=lohn, spz=-Math.abs(zahl(String(($('raStdRab')||{}).value||''))); lohn=lohn*(1+spz/100);
   var mpz=zahl(String(($('raMatPz')||{}).value||'').replace('+','')), matBr=0;
   a.material.forEach(function(m){ var pz=m.aufschlag==null?mpz:m.aufschlag; matBr+=(m.ek||0)*(1+pz/100); });
   var mrab=Math.abs(zahl(String(($('raMatRab')||{}).value||''))), matVoll=matBr/1.19, mat=matVoll*(1-mrab/100), netto=lohn+mat, mwst=netto*0.19, brutto=netto+mwst;
   var ab=(a.status&&a.status.abschlag||[]).reduce(function(s,x){ return s+(x.betrag===''?0:zahl(x.betrag)); },0);
-  if($('raLohn')) $('raLohn').innerHTML=(spz?'<span class="klein" style="font-weight:400">'+(spz<0?'Nachlass ':'Aufschlag ')+euro(Math.abs(lohn-lohn/(1+spz/100)))+' · </span>':'')+euro(lohn);
-  if($('raMat')) $('raMat').innerHTML=(mrab?'<span class="klein" style="font-weight:400">Nachlass '+euro(matVoll-mat)+' · </span>':'')+euro(mat);
-  $('raSumme').innerHTML='<div class="zeileL"><span>Netto</span><b>'+euro(netto)+'</b></div><div class="zeileL"><span class="klein">+ 19 % MwSt.</span><span>'+euro(mwst)+'</span></div>'+
+  if($('raLohn')) $('raLohn').textContent=euro(lohnVoll);
+  if($('raStdRabB')) $('raStdRabB').textContent=spz?'− '+euro(lohnVoll-lohn):'';
+  if($('raMat')) $('raMat').textContent=euro(matVoll);
+  if($('raMatRabB')) $('raMatRabB').textContent=mrab?'− '+euro(matVoll-mat):'';
+  $('raSumme').innerHTML=((lohnVoll-lohn)+(matVoll-mat)>0.004?'<div class="zeileL"><span class="klein">Summe vor Nachlass</span><span>'+euro(lohnVoll+matVoll)+'</span></div><div class="zeileL"><span class="klein">− Nachlass gesamt</span><span style="color:var(--gruen)">'+euro((lohnVoll-lohn)+(matVoll-mat))+'</span></div>':'')+'<div class="zeileL"><span>Netto</span><b>'+euro(netto)+'</b></div><div class="zeileL"><span class="klein">+ 19 % MwSt.</span><span>'+euro(mwst)+'</span></div>'+
     '<div class="zeileL" style="font-size:1.25rem"><span><b>Brutto</b></span><b style="color:var(--navy)">'+euro(brutto)+'</b></div>'+
     (ab?'<div class="zeileL"><span class="klein">− bereits gezahlte Abschläge (netto)</span><span>'+euro(ab)+'</span></div><div class="zeileL"><span><b>Noch zu zahlen brutto</b></span><b>'+euro((netto-ab)*1.19)+'</b></div>':'');
   RA.werte={lohn:lohn, mat:mat, matVoll:matVoll, mrab:mrab, netto:netto, brutto:brutto, spz:spz, mpz:mpz};
@@ -726,10 +730,12 @@ function rechnungVorschau(){
   var lohnBasis=0;
   document.querySelectorAll('[data-ra="satz"]').forEach(function(el){ var std=zahl(el.dataset.std), satz=zahl(el.value); if(!std) return; lohnBasis+=std*satz;
     var m=maR[el.dataset.id]||{}; pos.push({t:(m.rolle==='admin'?'Elektroniker, Bauleitung':'Elektroniker (Geselle)')+' – Arbeitszeit', menge:std, einh:'Std.', ep:satz}); });
-  if(w.spz) pos.push({t:(w.spz<0?'Nachlass ':'Aufschlag ')+String(Math.abs(w.spz)).replace('.',',')+' % auf die Arbeitszeit', menge:1, einh:'psch.', ep:lohnBasis*w.spz/100, rabatt:w.spz<0});
+  var nachl=[];
+  if(w.spz) nachl.push({t:'Nachlass '+String(Math.abs(w.spz)).replace('.',',')+' % auf die Arbeitszeit', menge:1, einh:'psch.', ep:lohnBasis*w.spz/100, rabatt:true});
   a.material.forEach(function(m){ var pz=m.aufschlag==null?w.mpz:m.aufschlag, ges=(m.ek||0)*(1+pz/100)/1.19, mg=zahl(m.menge)||1;
     pos.push({t:m.text, menge:mg, einh:m.einheit||'Stk', ep:ges/mg}); });
-  if(w.mrab) pos.push({t:'Nachlass '+String(w.mrab).replace('.',',')+' % auf das Material', menge:1, einh:'psch.', ep:-(w.matVoll-w.mat), rabatt:true});
+  if(w.mrab) nachl.push({t:'Nachlass '+String(w.mrab).replace('.',',')+' % auf das Material', menge:1, einh:'psch.', ep:-(w.matVoll-w.mat), rabatt:true});
+  pos=pos.concat(nachl);
   var tage=a.tage.filter(function(t){ return !t.rechnung; }).map(function(t){ return t.datum; }).sort();
   var taet={}; a.tage.forEach(function(t){ if(t.taetigkeit) taet[t.taetigkeit]=1; });
   var ab=(a.status&&a.status.abschlag||[]);
