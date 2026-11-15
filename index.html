@@ -102,7 +102,7 @@
   .tag.arbeit .h{color:var(--gruen)}
   .tag.zu{background:var(--gruen);color:#fff;border-color:var(--gruen)} .tag.zu .h{color:#fff}
   .tag.urlaub{background:var(--blauhell);color:var(--blau)} .tag.krank{background:var(--rothell);color:var(--rot)}
-  .tag.dim{opacity:.5}
+  .tag.dim{opacity:.28;background:#f1f3f5!important;color:#9aa1a8!important;border-color:transparent!important;box-shadow:none}
   .filter{display:flex;gap:6px;margin:0 0 10px}
   .filter button{flex:1;padding:9px 4px;border-radius:12px;background:#fff;font-weight:700;font-size:.85rem;color:var(--grau);border:2px solid transparent}
   .filter button.an.f-alle{border-color:var(--navy);color:var(--navy)} .filter button.an.f-U{background:var(--blauhell);color:var(--blau);border-color:var(--blau)} .filter button.an.f-K{background:var(--rothell);color:var(--rot);border-color:var(--rot)}
@@ -850,6 +850,11 @@ function eintragsListe(liste, datum, m){
   var darf = !m.gesperrt || S.nutzer.rolle==='admin';
   if(darf){
     h+='<button class="mittel b-hell" onclick="eintragForm(null,\''+datum+'\')">＋ '+L('manuell')+'</button>';
+    if(S.ansicht==='kalender' && !liste.some(function(e){ return e.typ!=='A'; })){
+      var maK=S.ma||S.nutzer.id;
+      h+='<div class="reihe" style="margin-top:8px"><button class="mittel" style="background:var(--blauhell);color:var(--blau)" onclick="abwSchnell(\''+maK+'\',\''+datum+'\',\'U\')">🏖 '+L('urlaub')+'</button>'+
+         '<button class="mittel" style="background:var(--rothell);color:var(--rot)" onclick="abwSchnell(\''+maK+'\',\''+datum+'\',\'K\')">🤒 '+L('krank')+'</button></div>';
+    }
     if(hatArbeit){ h+='<div style="height:8px"></div>'+(zu
       ? '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="pill p-gruen" style="padding:10px 12px">✓ '+Lt('tagZu')+'</span><button class="klein" style="text-decoration:underline" onclick="tagStatus(\''+datum+'\',false)">'+Lt('tagOeffnen')+'</button></div>'
       : '<button class="mittel b-navy" style="color:#fff" onclick="tagStatus(\''+datum+'\',true)">✓ '+L('tagSchliessen')+'</button>'); }
@@ -913,16 +918,17 @@ function kalGrid(ma, mo, d, fl, klein){
     var stunden=es.reduce(function(s,e){return s+std(e);},0), arbeit=es.some(function(e){return e.typ==='A';});
     var zu=d.abgeschlossen.indexOf(iso)>=0;
     var kl=['tag']; var unten='';
-    if(u){ kl.push('urlaub'); unten=tr()?'İzin':'Urlaub'; }
-    else if(k){ kl.push('krank'); unten=tr()?'Hasta':'Krank'; }
+    var abwH=function(t){ var x=es.filter(function(e){return e.typ===t;})[0]; return x&&x.stunden!==''&&x.stunden!=null&&+x.stunden>0&&+x.stunden<8?' '+fStd(+x.stunden)+'h':''; };
+    if(u){ kl.push('urlaub'); unten=(tr()?'İzin':'Urlaub')+abwH('U'); }
+    else if(k){ kl.push('krank'); unten=(tr()?'Hasta':'Krank')+abwH('K'); }
     else if(uu){ kl.push('uu'); unten=tr()?'Ücr.siz':'Unbez.'; }
     else if(arbeit){ kl.push(zu?'zu':'arbeit'); unten=(stunden?fStd(stunden):'…')+(zu?' ✓':''); }
     else if(ft){ kl.push('ft'); unten=tr()?'Tatil':'Feiertag'; }
     else if(we) kl.push('we');
-    if(fl && !(fl==='U'?u:k)) kl.push('dim');
+    if(fl && !(fl==='U'?u:k)){ kl.push('dim'); unten=''; }
     if(iso===heute) kl.push('heute');
     if(lauf && lauf.datum===iso) kl.push('laufend');
-    h+='<button class="'+kl.join(' ')+'" onclick="'+(klein?'S.ma=S.nutzer.id;':'')+'tagDetail(\''+iso+'\')"><span class="n">'+t+'</span><span class="h">'+esc(unten)+'</span></button>';
+    h+='<button class="'+kl.join(' ')+'" onclick="'+(klein?'S.ma=S.nutzer.id;tagDetail(':'kalTipp(')+'\''+iso+'\')"><span class="n">'+t+'</span><span class="h">'+esc(unten)+'</span></button>';
   }
   return h+'</div></div>';
 }
@@ -980,6 +986,22 @@ function wischen(el, fn){
   el.addEventListener('touchend',function(e){ if(x0===null) return; var dx=e.changedTouches[0].clientX-x0, dy=e.changedTouches[0].clientY-y0; x0=null;
     if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5) fn(dx<0?1:-1); },{passive:true});
 }
+/* Kalender antippen: im Filter Urlaub/Krank direkt eintragen bzw. bearbeiten */
+function kalTipp(iso){
+  var fl=S.kalFilter||''; if(fl!=='U'&&fl!=='K') return tagDetail(iso);
+  var ma=S.ma||S.nutzer.id, d=monatDaten(ma,monatVon(iso)); if(!d) return;
+  if(d.gesperrt && S.nutzer.rolle!=='admin') return toast(Lt('gesperrt'));
+  var vorh=d.eintraege.filter(function(e){ return e.datum===iso && e.typ===fl; })[0];
+  if(vorh) return eintragForm(vorh.id);
+  var dt=dObj(iso), we=dt.getDay()===0||dt.getDay()===6, ft=feiertag(iso), wort=fl==='U'?L('urlaub'):L('krank');
+  var los=function(){ abwSchnell(ma, iso, fl); };
+  if(we||ft) frage(datumText(iso)+' ist '+(ft?'ein Feiertag':'Wochenende')+' – trotzdem '+Lt(fl==='U'?'urlaub':'krank')+' eintragen?', '✓ '+wort, los); else los();
+}
+function abwSchnell(ma, iso, typ){
+  var e={id:uuid(), ma:ma, datum:iso, typ:typ, baustelle:'', start:'', ende:'', pause:0, taetigkeit:'', material:[], km:''};
+  rufe('eintragSpeichern',{eintrag:e}).then(function(m){ monatSetzen(m); schliesseBlatt(true); render(); toast((typ==='U'?'🏖 ':typ==='K'?'🤒 ':'⏸ ')+datumKurz(iso)+' '+Lt(typ==='U'?'urlaub':typ==='K'?'krank':'uu')+' ✓'); })
+    .catch(function(f){ toast(fehlerText(f)); });
+}
 function tagDetail(iso){
   var ma=S.ansicht==='kalender'?(S.ma||S.nutzer.id):S.nutzer.id, d=monatDaten(ma,monatVon(iso));
   if(!d) return;
@@ -1017,6 +1039,11 @@ function zeichneForm(){
   if(e.rechnung) h+='<div class="hinweis">'+(S.nutzer.rolle==='admin'?(e.rArt==='A'?'🟡 Per Abschlag ':'🟢 Schon ')+'abgerechnet ('+esc(e.rechnung)+'). Änderungen hier ändern die Rechnung in sevdesk nicht.':'🔒 '+Lt('ABGERECHNET'))+'</div>';
   if(e.typ!=='A') h+='<div class="seg">'+['A','U','K','UU'].map(function(t){ return '<button class="'+(e.typ===t?'an':'')+'" onclick="formLesen();F.typ=\''+t+'\';zeichneForm()">'+L(t==='A'?'arbeit':t==='U'?'urlaub':t==='K'?'krank':'uu')+'</button>'; }).join('')+'</div>';
   h+='<label class="f">'+L('datum','inl')+'</label><input type="date" class="eing" id="fDatum" value="'+e.datum+'">';
+  if(e.typ==='U'||e.typ==='K'){
+    var sv=e.stunden===''||e.stunden==null?8:+e.stunden;
+    h+='<label class="f">'+(tr()?'<b>Saat</b> / ':'')+'Stunden (ganzer Tag = 8)</label><div class="chips">'+[8,6,4,2].map(function(x){ return '<button class="'+(sv===x?'an':'')+'" onclick="formLesen();F.stunden='+x+';zeichneForm()">'+x+'</button>'; }).join('')+
+       '<input type="number" inputmode="decimal" class="eing" id="fAbwStd" style="width:90px;padding:9px" value="'+String(sv)+'"></div>';
+  }
   if(e.typ==='A'){
     var laeuft = e.id && !e.ende && S.laufend && S.laufend.id===e.id;
     h+='<label class="f">'+L('baustelle','inl')+'</label><select class="eing" id="fBs">'+(S.alleBaustellen.length?S.alleBaustellen:S.baustellen).filter(function(b){return b.aktiv!==false||b.id===e.baustelle;}).map(function(b){return '<option value="'+b.id+'" '+(b.id===e.baustelle?'selected':'')+'>'+esc(b.name)+'</option>';}).join('')+'</select>';
@@ -1138,6 +1165,7 @@ function matForm(bsId, eid){
 function formLesen(){
   if(!F) return; var v=function(id){ var el=$(id); return el?el.value:undefined; };
   if(v('fDatum')!==undefined) F.datum=v('fDatum');
+  if(v('fAbwStd')!==undefined){ var hs=zahl(v('fAbwStd')); F.stunden=(hs>0&&hs<8)?hs:''; }
   if(F.typ!=='A') return;
   if(v('fBs')!==undefined) F.baustelle=v('fBs'); if(v('fStart')!==undefined) F.start=v('fStart'); if(v('fEnde')!==undefined) F.ende=v('fEnde');
   if(v('fPause')!==undefined) F.pause=+v('fPause')||0; if(v('fTaet')!==undefined) F.taetigkeit=v('fTaet'); if(v('fKm')!==undefined) F.km=v('fKm');

@@ -23,7 +23,7 @@ var T = {
   Z:   { name: 'Zahlungen',   kopf: ['id', 'ma', 'datum', 'art', 'betrag', 'notiz'] },
   ME:  { name: 'Nachrichten', kopf: ['id', 'von', 'an', 'zeit', 'baustelle', 'art', 'text', 'gelesen'] },
   BS:  { name: 'Baustellen',  kopf: ['id', 'name', 'adresse', 'aktiv', 'erstellt', 'fuer', 'ordner'] },
-  E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert', 'belege', 'abfahrt', 'ankunft', 'uebern', 'rechnung'] },
+  E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert', 'belege', 'abfahrt', 'ankunft', 'uebern', 'rechnung', 'stunden'] },
   RE:  { name: 'Rechnungen',  kopf: ['id', 'baustelle', 'nr', 'art', 'datum', 'von', 'bis', 'betrag', 'stunden', 'erstellt'] },
   TAG: { name: 'Abschluesse', kopf: ['ma', 'datum', 'zeit'] },
   AU:  { name: 'Rechnungsauftraege', kopf: ['id', 'baustelle', 'von', 'bis', 'stunden', 'saetze', 'aufschlag', 'datei', 'erstellt', 'status', 'notiz', 'art', 'extra'] },
@@ -449,7 +449,8 @@ function eintragAus_(e) {
     taetigkeit: e.taetigkeit, material: m, km: e.km === '' ? '' : Number(e.km || 0),
     belege: belegeLesen_(e.belege),
     abfahrt: e.abfahrt || '', ankunft: e.ankunft || '', uebern: e.uebern === 'ja',
-    rechnung: e.rechnung || ''
+    rechnung: e.rechnung || '',
+    stunden: e.stunden === '' || e.stunden == null ? '' : Number(e.stunden)
   };
 }
 
@@ -540,7 +541,8 @@ function eintragSpeichern_(ich, d) {
     belege: belege.length ? JSON.stringify(belege) : '',
     abfahrt: typ === 'A' && /^\d{2}:\d{2}$/.test(String(e.abfahrt || '')) ? e.abfahrt : '',
     ankunft: typ === 'A' && /^\d{2}:\d{2}$/.test(String(e.ankunft || '')) ? e.ankunft : '',
-    uebern: typ === 'A' && e.uebern ? 'ja' : ''
+    uebern: typ === 'A' && e.uebern ? 'ja' : '',
+    stunden: (typ === 'U' || typ === 'K') && Number(e.stunden) > 0 && Number(e.stunden) < STD_AUSFALL ? Math.round(Number(e.stunden) * 100) / 100 : ''
   };
   if (alt) aktualisieren_(T.E, obj.id, obj); else { schreiben_(T.E, obj); if (typ === 'A') tagWiederOeffnen_(ma, e.datum); }
   return monat_(ich, { ma: ma, monat: e.datum.slice(0, 7) });
@@ -860,7 +862,9 @@ function urlaubKonto_(maId, jahr) {
   var m = finde_(T.MA, maId) || {};
   var anspruch = Number(m.urlaubJahr || 0);
   var vorher = String(m.urlaubStartJahr || '') === String(jahr) ? Number(m.urlaubStartGenommen || 0) : 0;
-  var app = zeilen_(T.E).filter(function (e) { return e.ma === maId && e.typ === 'U' && String(e.datum).indexOf(jahr) === 0; }).length;
+  var app = zeilen_(T.E).filter(function (e) { return e.ma === maId && e.typ === 'U' && String(e.datum).indexOf(jahr) === 0; })
+    .reduce(function (a, e) { var h = Number(e.stunden); return a + (h > 0 && h < 8 ? h / 8 : 1); }, 0);
+  app = Math.round(app * 100) / 100;
   return { jahr: String(jahr), anspruch: anspruch, genommen: app + vorher, rest: anspruch - app - vorher };
 }
 
@@ -1421,8 +1425,9 @@ function monatsZeilen_(ma, mo) {
       if (e.typ === 'UU') { if (!zeilen.some(function (z) { return z.typ === 'UU'; })) { zeilen.push({ typ: 'UU', text: 'Unbez. Urlaub', std: 0 }); sum.unbezahlt = (sum.unbezahlt || 0) + 1; } return; }
       if (e.typ === 'K' || e.typ === 'U') {
         if (zeilen.some(function (z) { return z.typ === e.typ; })) return; // doppelte Abwesenheit nur einmal
-        zeilen.push({ typ: e.typ, text: e.typ === 'K' ? 'Krank' : 'Urlaub', std: STD_AUSFALL });
-        sum[e.typ === 'K' ? 'krank' : 'urlaub']++; sum.bezahlt += STD_AUSFALL;
+        var hA = e.stunden !== '' && e.stunden != null && Number(e.stunden) > 0 ? Number(e.stunden) : STD_AUSFALL;
+        zeilen.push({ typ: e.typ, text: (e.typ === 'K' ? 'Krank' : 'Urlaub') + (hA < STD_AUSFALL ? ' (' + String(hA).replace('.', ',') + ' Std.)' : ''), std: hA });
+        sum[e.typ === 'K' ? 'krank' : 'urlaub'] += hA / STD_AUSFALL; sum.bezahlt += hA;
       } else {
         var h = stunden_(e), b = bsN[e.baustelle] || {};
         zeilen.push({ typ: 'A', text: b.name || '?', adresse: b.adresse || '', start: e.start, ende: e.ende || '', pause: Number(e.pause || 0), std: Math.round(h * 100) / 100, km: Number(e.km || 0), taetigkeit: e.taetigkeit || '', abfahrt: e.abfahrt || '', ankunft: e.ankunft || '', uebern: !!e.uebern });
