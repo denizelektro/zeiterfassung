@@ -655,28 +655,61 @@ function bsManuell(id){ S.auswahlBs=id; LS.setItem('ze_letzteBs',id);
   if(e) return eintragForm(e.id);
   eintragForm(null, heuteIso()); F.baustelle=id; zeichneForm(); }
 /* „Rechnung schreiben“ (nur Chef): alles Offene bis heute als Auftrag an Claude → Entwurf in sevdesk */
+var RA=null;
+function raSatz(m){ var v=abSatz(m.id); return v!==''?v:(m.rolle==='admin'?'63':'55'); }
 function rechnungDialog(id){
   oeffneBlatt('<h2>🧾 Rechnung schreiben</h2><div class="lade" style="min-height:100px">…</div>');
   Promise.all([rufe('abrechnung',{baustelle:id, von:'2000-01-01', bis:heuteIso()}), rufe('rechnungAuftraege',{baustelle:id})]).then(function(r){
     var a=r[0], au=r[1].liste, st=a.status||{offen:0,abschlag:[]}, offen=au.filter(function(x){ return x.status==='offen'; })[0];
+    RA={id:id, a:a};
     var tage=a.tage.filter(function(t){ return !t.rechnung; }).map(function(t){ return t.datum; }).sort();
-    var h='<h2>🧾 Rechnung schreiben</h2><div class="klein" style="margin:-6px 0 10px">'+esc(a.baustelle.name)+'</div>';
-    h+='<div class="karte"><div class="zeileL"><span>⚪ <b>Offen</b>'+(tage.length?' · '+deD(tage[0])+' – '+deD(tage[tage.length-1]):'')+'</span><b>'+fStd(st.offen)+' h</b></div>'+
-       (a.material.length?'<div class="klein">📦 '+a.material.length+' Material-Position(en)'+(a.material.some(function(m){return m.ohnePreis;})?' · einige ohne Preis':'')+'</div>':'')+
-       st.abschlag.map(function(x){ return '<div class="klein">🟡 Abschlag '+esc(x.nr)+(x.betrag!==''?' · '+euro(x.betrag):'')+' wird abgezogen</div>'; }).join('')+'</div>';
-    if(offen) h+='<div class="hinweis">⏳ Schon angefordert am '+esc(offen.erstellt.slice(8,10)+'.'+offen.erstellt.slice(5,7)+'. '+offen.erstellt.slice(11,16))+' ('+fStd(offen.stunden)+' h). Neu anfordern ersetzt diesen Auftrag.</div>';
-    if(!st.offen) h+='<p>Bei dieser Baustelle ist nichts mehr offen.</p>';
-    else h+='<label class="f">Hinweis für Claude (optional)</label><textarea class="eing" id="raNotiz" placeholder="z. B. Anfahrt pauschal 40 €, Rabatt …"></textarea>'+
-      '<p class="klein">Claude legt daraus in sevdesk einen <b>Entwurf</b> an (Stundensätze 63 € / 55 € – Claude fragt vorher nach). Nichts wird gespeichert oder verschickt, bis du es selbst tust.</p>'+
-      '<div id="fFehler"></div><button class="gross b-navy" id="raOk" onclick="rechnungAnfordern(\''+id+'\')">✓ Rechnung anfordern</button><div style="height:8px"></div>';
-    h+=(offen?'<button class="mittel b-hell" onclick="rechnungZurueck(\''+offen.id+'\',\''+id+'\')">Auftrag zurückziehen</button><div style="height:8px"></div>':'')+'<button class="mittel b-hell" onclick="bsSeite(\''+id+'\')">'+L('abbrechen')+'</button>';
-    oeffneBlatt(h, true);
+    var maRolle={}; (S.mitarbeiter||[]).forEach(function(m){ maRolle[m.id]=m; });
+    var h='<h2>🧾 Rechnung schreiben</h2><div class="klein" style="margin:-6px 0 10px">'+esc(a.baustelle.name)+(tage.length?' · '+deD(tage[0])+' – '+deD(tage[tage.length-1]):'')+'</div>';
+    if(offen) h+='<div class="hinweis">⏳ Schon angefordert am '+esc(offen.erstellt.slice(8,10)+'.'+offen.erstellt.slice(5,7)+'. '+offen.erstellt.slice(11,16))+'. Neu anfordern ersetzt diesen Auftrag.</div>';
+    if(!st.offen && !a.material.length){ h+='<p>Bei dieser Baustelle ist nichts mehr offen.</p><button class="mittel b-hell" onclick="bsSeite(\''+id+'\')">'+L('abbrechen')+'</button>'; oeffneBlatt(h,true); return; }
+    // Arbeitszeit
+    h+='<div class="karte"><p class="titel">⏱ Arbeitszeit</p>'+a.personen.map(function(p){ var m=maRolle[p.id]||{id:p.id,rolle:''};
+      return '<div class="zeileL"><div><b>'+esc(p.name)+'</b><div class="klein">'+fStd(p.stunden)+' Std. · '+p.tage+' Tag(e)</div></div>'+
+        '<label class="einh" style="width:104px"><input class="eing" inputmode="decimal" data-ra="satz" data-id="'+p.id+'" data-std="'+p.stunden+'" value="'+esc(fmt2(raSatz(m)))+'" oninput="raRechnen()" onblur="this.value=fmt2(this.value);LS.setItem(\'ze_satz_'+p.id+'\',this.value);raRechnen()"><span>€/h</span></label></div>'; }).join('')+
+      '<div class="zeileL"><span class="klein">Auf-/Abschlag auf Stunden</span><label class="einh" style="width:90px"><input class="eing" id="raStdPz" inputmode="text" placeholder="±" oninput="raRechnen()"><span>%</span></label></div>'+
+      '<div class="zeileL"><span>Summe Arbeitszeit netto</span><b id="raLohn"></b></div></div>';
+    // Material
+    var fehlt=a.material.filter(function(m){ return m.ohnePreis||!m.ek; }).length;
+    h+='<div class="karte"><p class="titel">📦 Material</p>'+(a.material.length?a.material.map(function(m){
+        return '<div class="zeileL"><div><b>'+esc(String(m.menge).replace('.',','))+' '+esc(m.einheit)+'</b> '+esc(m.text)+(m.haendler?' <span class="klein">· '+esc(m.haendler)+'</span>':'')+(m.ohnePreis||!m.ek?' <span class="pill p-gelb">Preis fehlt</span>':'')+'</div>'+
+          '<div style="text-align:right;white-space:nowrap" class="klein">EK '+euro(m.ek)+(m.aufschlag!=null?'<br>'+(m.aufschlag>=0?'+':'')+String(m.aufschlag).replace('.',',')+' %':'')+'</div></div>'; }).join(''):'<div class="leer">Kein Material</div>')+
+      '<div class="zeileL"><span class="klein">Aufschlag für Zeilen ohne eigenes %</span><label class="einh" style="width:90px"><input class="eing" id="raMatPz" inputmode="text" value="'+esc(abAufschlag())+'" oninput="raRechnen()" onblur="LS.setItem(\'ze_aufschlag\',this.value)"><span>%</span></label></div>'+
+      '<div class="zeileL"><span>Summe Material netto</span><b id="raMat"></b></div>'+(fehlt?'<div class="klein">⚠ '+fehlt+' Position(en) ohne Preis – zählen mit 0 €.</div>':'')+'</div>';
+    // Ergebnis
+    h+='<div class="karte" id="raSumme" style="text-align:right"></div>';
+    h+='<label class="f">Hinweis für Claude (optional)</label><textarea class="eing" id="raNotiz" placeholder="z. B. Anfahrt pauschal 40 €"></textarea>'+
+      '<p class="klein">„Rechnung anfordern“: Claude legt mit diesen Sätzen einen <b>Entwurf</b> in sevdesk an (nichts wird verschickt). Wenn der Kunde bar zahlt, reicht dir die Summe oben.</p>'+
+      '<div id="fFehler"></div><button class="gross b-navy" id="raOk" onclick="rechnungAnfordern(\''+id+'\')">✓ Rechnung anfordern</button><div style="height:8px"></div>'+
+      (offen?'<button class="mittel b-hell" onclick="rechnungZurueck(\''+offen.id+'\',\''+id+'\')">Auftrag zurückziehen</button><div style="height:8px"></div>':'')+
+      '<button class="mittel b-hell" onclick="bsSeite(\''+id+'\')">'+L('abbrechen')+'</button>';
+    oeffneBlatt(h, true); raRechnen();
   }).catch(function(f){ oeffneBlatt('<p>'+esc(fehlerText(f))+'</p>'); });
+}
+function raRechnen(){
+  if(!RA) return; var a=RA.a, lohn=0;
+  document.querySelectorAll('[data-ra="satz"]').forEach(function(el){ lohn+=zahl(el.dataset.std)*zahl(el.value); });
+  var spz=zahl(String(($('raStdPz')||{}).value||'').replace('+','')); lohn=lohn*(1+spz/100);
+  var mpz=zahl(String(($('raMatPz')||{}).value||'').replace('+','')), matBr=0;
+  a.material.forEach(function(m){ var pz=m.aufschlag==null?mpz:m.aufschlag; matBr+=(m.ek||0)*(1+pz/100); });
+  var mat=matBr/1.19, netto=lohn+mat, mwst=netto*0.19, brutto=netto+mwst;
+  var ab=(a.status&&a.status.abschlag||[]).reduce(function(s,x){ return s+(x.betrag===''?0:zahl(x.betrag)); },0);
+  if($('raLohn')) $('raLohn').textContent=euro(lohn);
+  if($('raMat')) $('raMat').textContent=euro(mat);
+  $('raSumme').innerHTML='<div class="zeileL"><span>Netto</span><b>'+euro(netto)+'</b></div><div class="zeileL"><span class="klein">+ 19 % MwSt.</span><span>'+euro(mwst)+'</span></div>'+
+    '<div class="zeileL" style="font-size:1.25rem"><span><b>Brutto</b></span><b style="color:var(--navy)">'+euro(brutto)+'</b></div>'+
+    (ab?'<div class="zeileL"><span class="klein">− bereits gezahlte Abschläge (netto)</span><span>'+euro(ab)+'</span></div><div class="zeileL"><span><b>Noch zu zahlen brutto</b></span><b>'+euro((netto-ab)*1.19)+'</b></div>':'');
+  RA.werte={lohn:lohn, mat:mat, netto:netto, brutto:brutto, spz:spz, mpz:mpz};
 }
 function rechnungAnfordern(id){
   var b=$('raOk'); b.disabled=true; b.innerHTML='⏳ Übersicht wird erstellt…';
-  var saetze={}; (S.mitarbeiter||[]).forEach(function(m){ var v=zahl(abSatz(m.id)); if(v>0) saetze[m.id]=v; });
-  rufe('rechnungAuftrag',{baustelle:id, notiz:$('raNotiz').value, saetze:saetze, aufschlag:zahl(abAufschlag())}).then(function(r){
+  var saetze={}; document.querySelectorAll('[data-ra="satz"]').forEach(function(el){ var v=zahl(el.value); if(v>0){ saetze[el.dataset.id]=v; LS.setItem('ze_satz_'+el.dataset.id, fmt2(v)); } });
+  var w=RA&&RA.werte||{}, notiz=$('raNotiz').value+(w.spz?' · Stunden '+(w.spz>0?'+':'')+w.spz+' %':'')+(w.netto?' · App-Summe netto '+euro(w.netto)+' / brutto '+euro(w.brutto):'');
+  rufe('rechnungAuftrag',{baustelle:id, notiz:notiz, saetze:saetze, aufschlag:w.mpz==null?zahl(abAufschlag()):w.mpz}).then(function(r){
     oeffneBlatt('<h2>✓ Rechnung angefordert</h2><p>'+fStd(r.offen)+' h ('+deD(r.von)+' – '+deD(r.bis)+') plus Material. Die Übersicht liegt in Drive unter „Rechn.-Angebot“.</p>'+
       '<p class="klein">Schreib Claude einfach „Rechnung schreiben“ – dann wird der Entwurf in sevdesk angelegt.</p>'+
       '<a class="mittel b-hell" style="text-decoration:none" href="'+r.datei+'" target="_blank">Übersicht öffnen</a><div style="height:8px"></div><button class="mittel b-navy" style="color:#fff" onclick="schliesseBlatt()">OK</button>');
@@ -913,7 +946,8 @@ function zeichneForm(){
       '<button id="kiB_mass" onclick="aufmass()">📏 '+L('aufmass')+'</button></div>'+
       ((e.belege||[]).length?'<div class="belege">'+e.belege.map(function(b,i){ return '<span>'+(adm?'<a href="https://drive.google.com/file/d/'+esc(b.id)+'/view" target="_blank">🧾 '+esc(b.name.replace(/\.jpg$/,''))+'</a>':'🧾 '+Lt('beleg')+' '+(i+1)+' ✓')+(adm?'<button class="x" onclick="formLesen();F.belege.splice('+i+',1);zeichneForm()">✕</button>':'')+'</span>'; }).join('')+'</div>':'')+
       '<div id="fMat">'+e.material.map(matZeile).join('')+'</div>'+
-      '<button class="mittel b-hell" style="min-height:44px" onclick="formLesen();F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">＋ '+L('matHinzu')+'</button>';
+      '<button class="mittel b-hell" style="min-height:44px" onclick="formLesen();F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">＋ '+L('matHinzu')+'</button>'+
+      '<div class="karte" id="matSumme" style="margin-top:10px;display:none"></div>';
     h+='<label class="f">'+L('km','inl')+'</label><input type="number" inputmode="decimal" class="eing" id="fKm" value="'+(e.km===''||e.km==null?'':e.km)+'" placeholder="0">';
   }
   h+='<div id="fFehler"></div><div style="height:14px"></div><div class="blattFuss"><button class="gross b-navy" onclick="formSpeichern()">💾 '+L('speichern')+'</button></div><div style="height:8px"></div>';
@@ -942,7 +976,18 @@ function matVkText(menge, ep, a){
   var ek=e*n, au=String(a==null?'':a).replace('+','').trim(), pz=au===''?0:zahl(au), vk=ek*(1+pz/100);
   return (tr()?'Toplam / ':'')+'Gesamt: '+String(n).replace('.',',')+' × '+euro(e)+' = <b>'+euro(ek)+'</b>'+(pz?' · '+(pz>0?'+':'')+String(pz).replace('.',',')+' % = <b style="color:var(--gruen)">'+euro(vk)+'</b>':'')+' brutto';
 }
-function matVk(i){ var row=document.querySelectorAll('#fMat .mat')[i]; if(!row) return; var g=function(k){ var el=row.querySelector('[data-k="'+k+'"]'); return el?el.value:''; }; var o=$('vk'+i); if(o) o.innerHTML=matVkText(g('menge'), g('ep'), g('aufschlag')); }
+function matVk(i){ var row=document.querySelectorAll('#fMat .mat')[i]; if(!row) return; var g=function(k){ var el=row.querySelector('[data-k="'+k+'"]'); return el?el.value:''; }; var o=$('vk'+i); if(o) o.innerHTML=matVkText(g('menge'), g('ep'), g('aufschlag')); matSumme(); }
+function matSumme(){
+  var el=$('matSumme'); if(!el) return; var ek=0, vk=0, n=0;
+  document.querySelectorAll('#fMat .mat').forEach(function(row){ var g=function(k){ var x=row.querySelector('[data-k="'+k+'"]'); return x?x.value:''; };
+    var e=zahl(g('ep'))*(zahl(g('menge'))||1); if(!e) return; n++; var pz=zahl(String(g('aufschlag')).replace('+','')); ek+=e; vk+=e*(1+pz/100); });
+  var adm=S.nutzer.rolle==='admin';
+  el.innerHTML = n ? '<div class="zeileL"><span>'+(tr()?'Malzeme toplam / ':'')+'Material gesamt ('+n+')</span><b></b></div>'+
+    '<div class="zeileL"><span class="klein">'+(adm?'Einkauf (EK) brutto':'Brutto')+'</span><span>'+euro(ek)+'</span></div>'+
+    (adm&&Math.abs(vk-ek)>0.004?'<div class="zeileL"><span class="klein">Mit Aufschlag brutto</span><b style="color:var(--gruen)">'+euro(vk)+'</b></div>':'')+
+    (adm?'<div class="zeileL"><span class="klein">Kunde netto (ohne 19 % MwSt.)</span><b>'+euro(vk/1.19)+'</b></div>':'') : '';
+  el.style.display=n?'':'none';
+}
 function haendlerGewaehlt(sel,i){
   formLesen();
   if(sel.value==='+'){
@@ -980,7 +1025,8 @@ function zeichneMatForm(){
       '<button id="kiB_mass" onclick="aufmass()">📏 '+L('aufmass')+'</button></div>'+
     ((e.belege||[]).length?'<div class="belege">'+e.belege.map(function(b,i){ return '<span>🧾 '+(adm?esc(b.name.replace(/\.(jpg|pdf)$/,'')):Lt('beleg')+' '+(i+1)+' ✓')+'</span>'; }).join('')+'</div>':'')+
     '<div id="fMat">'+e.material.map(matZeile).join('')+'</div>'+
-    '<button class="mittel b-hell" style="min-height:44px" onclick="formLesen();F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">＋ '+L('matHinzu')+'</button>';
+    '<button class="mittel b-hell" style="min-height:44px" onclick="formLesen();F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">＋ '+L('matHinzu')+'</button>'+
+    '<div class="karte" id="matSumme" style="margin-top:10px;display:none"></div>';
   h+='<div id="fFehler"></div><div style="height:14px"></div><div class="blattFuss"><button class="gross b-navy" onclick="formSpeichern()">💾 '+L('speichern')+'</button></div><div style="height:8px"></div>'+
      '<button class="mittel b-hell" onclick="schliesseBlatt(true)">'+L('abbrechen')+'</button>';
   oeffneBlatt(h, true);
@@ -1517,7 +1563,7 @@ function maSpeichern(id){
 var _frageJa=null;
 function frage(text, jaText, ja){ _frageJa=ja;
   oeffneBlatt('<h2 style="margin-bottom:18px">'+text+'</h2><button class="gross b-rot" onclick="var f=_frageJa;schliesseBlatt();f()">'+jaText+'</button><div style="height:8px"></div><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>'); }
-function oeffneBlatt(html, form){
+function oeffneBlatt(html, form){ setTimeout(function(){ if($('matSumme')) matSumme(); },0);
   var b=$('blatt'); b.innerHTML='<div class="griff"></div><button class="blattZu" onclick="schliesseBlatt()" aria-label="zu">✕</button>'+html; b.scrollTop=0; b.style.transform='';
   $('schleier').classList.add('an'); b.classList.add('an'); document.documentElement.classList.add('blattOffen');
 }
