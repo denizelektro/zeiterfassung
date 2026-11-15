@@ -882,7 +882,7 @@ function matZeile(m,i){
     '<button class="x" onclick="formLesen();F.material.splice('+i+',1);if(!F.material.length)F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">✕</button>'+
     '<select class="eing hd" data-i="'+i+'" data-k="haendler" onchange="haendlerGewaehlt(this,'+i+')"><option value="">'+(tr()?'Mağaza / ':'')+'Händler…</option>'+hl.map(function(x){ return '<option '+(m.haendler===x?'selected':'')+'>'+esc(x)+'</option>'; }).join('')+'<option value="+">＋ '+(tr()?'Yeni / ':'')+'Neu…</option></select>'+
     '<input class="eing pr" inputmode="decimal" placeholder="€ '+(tr()?'toplam':'gesamt')+'" value="'+(m.preis==null?'':esc(String(m.preis).replace('.',',')))+'" data-i="'+i+'" data-k="preis">'+
-    (adm?'<button class="x such" id="pz'+i+'" onclick="preisSuchen('+i+')" title="Online-Preis">🔎</button>':'<span></span>')+
+    '<span></span>'+
     (m.preisInfo?'<div class="klein pInfo">'+m.preisInfo+'</div>':'')+'</div>';
 }
 function haendlerGewaehlt(sel,i){
@@ -894,7 +894,6 @@ function haendlerGewaehlt(sel,i){
     F.material[i].haendler=n; S.haendler=(S.haendler||[]).concat([n]); return zeichneForm();
   }
   F.material[i].haendler=sel.value;
-  if(S.nutzer.rolle==='admin' && sel.value && String(F.material[i].text||'').trim() && (F.material[i].preis==null||F.material[i].preis==='')) preisSuchen(i);
 }
 function preisSuchen(i){
   formLesen(); var m=F.material[i];
