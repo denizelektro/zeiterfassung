@@ -18,7 +18,8 @@
     --rot:#d93025; --rothell:#fce8e6; --blau:#1a73e8; --blauhell:#e8f0fe; --grau:#5f6368; --linie:#e3e6ea; --bg:#f4f6f8;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;padding:0;overflow-x:hidden;max-width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%;background:var(--bg);color:#1b1f24;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:16px}
+  html{overflow-x:hidden} body{overflow-x:clip}
+  html,body{margin:0;padding:0;max-width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%;background:var(--bg);color:#1b1f24;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:16px}
   body{min-height:100vh;padding-bottom:calc(76px + env(safe-area-inset-bottom))}
   button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
   input,select,textarea{font:inherit;font-size:16px}
@@ -121,7 +122,7 @@
   .blatt{position:fixed;left:0;right:0;bottom:0;max-height:92vh;overflow:auto;background:var(--bg);border-radius:22px 22px 0 0;z-index:21;transform:translateY(105%);transition:transform .25s ease;padding:8px 14px calc(20px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto;-webkit-overflow-scrolling:touch}
   .blatt.an{transform:none}
   .blatt{overscroll-behavior:contain}
-  body.blattOffen{overflow:hidden}
+  html.blattOffen{overflow:hidden}
   .blatt h2{padding-right:40px}
   .blattZu{position:absolute;top:8px;right:10px;width:36px;height:36px;border-radius:50%;border:0;background:#e4e8ec;color:#33404d;font-size:1.05rem;line-height:36px;padding:0;cursor:pointer}
   .griff{width:44px;height:5px;border-radius:9px;background:#c4c9cf;margin:4px auto 10px}
@@ -189,7 +190,7 @@
   .sel-ma{margin-bottom:10px}
   .hidden{display:none!important}
   body.busy .gross, body.busy .mittel, body.busy .navi, body.busy .pill, body.busy #blatt button{pointer-events:none;opacity:.55}
-  html,body{overscroll-behavior:none}
+  html{overscroll-behavior:none}
   .login{height:100dvh}
 </style>
 </head>
@@ -1508,9 +1509,9 @@ function frage(text, jaText, ja){ _frageJa=ja;
   oeffneBlatt('<h2 style="margin-bottom:18px">'+text+'</h2><button class="gross b-rot" onclick="var f=_frageJa;schliesseBlatt();f()">'+jaText+'</button><div style="height:8px"></div><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>'); }
 function oeffneBlatt(html, form){
   var b=$('blatt'); b.innerHTML='<div class="griff"></div><button class="blattZu" onclick="schliesseBlatt()" aria-label="zu">✕</button>'+html; b.scrollTop=0; b.style.transform='';
-  $('schleier').classList.add('an'); b.classList.add('an'); document.body.classList.add('blattOffen');
+  $('schleier').classList.add('an'); b.classList.add('an'); document.documentElement.classList.add('blattOffen');
 }
-function schliesseBlatt(){ var b=$('blatt'); b.style.transform=''; b.classList.remove('an'); $('schleier').classList.remove('an'); document.body.classList.remove('blattOffen'); F=null; }
+function schliesseBlatt(){ var b=$('blatt'); b.style.transform=''; b.classList.remove('an'); $('schleier').classList.remove('an'); document.documentElement.classList.remove('blattOffen'); F=null; }
 (function(){ var b=$('blatt'), y0=null, dy=0, zieh=false;
   b.addEventListener('touchstart',function(e){ var t=e.target, obenTeil=(e.touches[0].clientY-b.getBoundingClientRect().top)<56;
     if(/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) { y0=null; return; }
