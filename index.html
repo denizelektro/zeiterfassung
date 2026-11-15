@@ -384,6 +384,7 @@ function init(){
 }
 function startSetzen(d){
   if(d.ungelesen!==undefined) S.ungelesen=d.ungelesen;
+  if(d.claudeUngelesen!==undefined) S.claudeUngelesen=d.claudeUngelesen;
   try{ LS.setItem('ze_start', JSON.stringify(d)); LS.setItem('ze_sprache', d.nutzer.sprache||'de'); }catch(e){}
   S.nutzer=d.nutzer; S.baustellen=d.baustellen; S.kiAktiv=!!d.kiAktiv; S.mitarbeiter=d.mitarbeiter||[]; S.alleBaustellen=d.alleBaustellen||[];
   S.ma = S.ma || S.nutzer.id; S.kalMonat = S.kalMonat || monatVon(heuteIso()); S.adminMonat = S.adminMonat || monatVon(heuteIso());
@@ -422,14 +423,14 @@ function render(){
   if(!S.nutzer) return;
   zeigeOffline();
   var admin = S.nutzer.rolle==='admin';
-  var kopfTitel = S.ansicht==='heute' ? L('heute') : S.ansicht==='reise' ? L('reiseLang') : S.ansicht==='kalender' ? L('kalender') : S.ansicht==='nachrichten' ? L('nachrichten') : 'Verwaltung';
+  var kopfTitel = S.ansicht==='heute' ? L('heute') : S.ansicht==='reise' ? L('reiseLang') : S.ansicht==='kalender' ? L('kalender') : S.ansicht==='nachrichten' ? L('nachrichten') : S.ansicht==='claude' ? 'Claude – Büro' : 'Verwaltung';
   var html = '<header class="kopf"><div class="zeile"><h1>'+kopfTitel+'</h1><button class="ikon" onclick="menue()" aria-label="Menü">☰</button></div>'+
     '<div class="sub">'+esc(S.nutzer.name)+'</div></header><main id="inhalt"></main>'+
-    '<nav class="unten">'+navKnopf('heute','🕒')+navKnopf('kalender','📅')+navKnopf('reise','🚗')+navKnopf('nachrichten','💬')+(admin?navKnopf('verwaltung','⚙️'):'')+'</nav>';
+    '<nav class="unten">'+navKnopf('heute','🕒')+navKnopf('kalender','📅')+navKnopf('reise','🚗')+navKnopf('nachrichten','💬')+(admin?navKnopf('claude','🤖')+navKnopf('verwaltung','⚙️'):'')+'</nav>';
   $('app').innerHTML = html;
-  if(S.ansicht==='heute') zeigeHeute(); else if(S.ansicht==='reise') zeigeHeute(true); else if(S.ansicht==='kalender') zeigeKalender(); else if(S.ansicht==='nachrichten') zeigeNachrichten(); else zeigeVerwaltung();
+  if(S.ansicht==='heute') zeigeHeute(); else if(S.ansicht==='reise') zeigeHeute(true); else if(S.ansicht==='kalender') zeigeKalender(); else if(S.ansicht==='nachrichten') zeigeNachrichten(); else if(S.ansicht==='claude') zeigeClaude(); else zeigeVerwaltung();
 }
-function navKnopf(id, ikon){ return '<button class="'+(S.ansicht===id?'an':'')+'" onclick="gehe(\''+id+'\')"><span class="i">'+ikon+(id==='nachrichten'&&S.ungelesen?'<span class="badge">'+S.ungelesen+'</span>':'')+'</span>'+(id==='verwaltung'?'<span>Verwaltung</span>':L(id))+'</button>'; }
+function navKnopf(id, ikon){ return '<button class="'+(S.ansicht===id?'an':'')+'" onclick="gehe(\''+id+'\')"><span class="i">'+ikon+(id==='nachrichten'&&S.ungelesen?'<span class="badge">'+S.ungelesen+'</span>':'')+(id==='claude'&&S.claudeUngelesen?'<span class="badge">'+S.claudeUngelesen+'</span>':'')+'</span>'+(id==='verwaltung'?'<span>Verwaltung</span>':id==='claude'?'<span>Claude</span>':L(id))+'</button>'; }
 function gehe(id){ S.ansicht=id; if(id==='kalender'){ S.kalMonat = S.kalMonat||monatVon(heuteIso()); } render(); window.scrollTo(0,0); }
 function menue(){
   oeffneBlatt('<h2>'+esc(S.nutzer.name)+'</h2>'+
@@ -1309,6 +1310,29 @@ $('schleier').onclick=schliesseBlatt; $('schleier').addEventListener('touchmove'
 
 /* ======================= NACHRICHTEN ======================= */
 var ARTEN={material:['📦','material'], vorfall:['⚠️','vorfall'], sonstiges:['💬','sonstiges']};
+/* ======================= CLAUDE (nur Chef) ======================= */
+var CLAUDE_ART={bericht:['📊','Wochenbericht'],mahnung:['🔴','Mahnung'],frage:['❓','Frage'],info:['🤖','Info']};
+function zeigeClaude(){
+  var h='<div class="reihe" style="margin-bottom:12px"><button class="mittel b-hell" onclick="ladeClaude()">↻ Aktualisieren</button>'+
+    '<button class="mittel b-hell" onclick="claudeGelesen(null,true)">✓ Alle gelesen</button></div><div id="cliste"><div class="leer">…</div></div>';
+  $('inhalt').innerHTML=h; ladeClaude();
+}
+function ladeClaude(){
+  return rufeRoh('claude',{}).then(function(d){ S.claudeNachr=d.liste; S.claudeUngelesen=d.ungelesen; if(S.ansicht==='claude') listeClaude(); badgeAktualisieren(); })
+    .catch(function(f){ var el=$('cliste'); if(el) el.innerHTML='<div class="leer">'+esc(fehlerText(f))+'</div>'; });
+}
+function claudeText(s){ return esc(s).replace(/\n/g,'<br>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(https:\/\/[^\s<]+)/g,'<a class="link" href="$1" target="_blank">Öffnen</a>'); }
+function listeClaude(){
+  var el=$('cliste'); if(!el) return; var l=S.claudeNachr||[];
+  if(!l.length){ el.innerHTML='<div class="leer">Noch keine Nachrichten von Claude</div>'; return; }
+  el.innerHTML=l.map(function(m){ var a=CLAUDE_ART[m.art]||CLAUDE_ART.info, z=m.zeit? m.zeit.slice(8,10)+'.'+m.zeit.slice(5,7)+'. '+m.zeit.slice(11,16):'';
+    return '<div class="msg'+(m.gelesen?'':' neu')+'"><div class="kopfz"><span>'+a[0]+' <b>'+esc(m.titel)+'</b></span><span>'+z+'</span></div>'+
+      '<div class="t">'+claudeText(m.text)+'</div><div class="kopfz"><span>'+a[1]+'</span><span style="display:flex;gap:6px">'+
+      (m.link?'<a class="pill p-blau" href="'+esc(m.link)+'" target="_blank">📄 Bericht</a>':'')+
+      (m.gelesen?'<span>✓ gelesen</span>':'<button class="pill p-gruen" onclick="claudeGelesen(\''+m.id+'\')">✓ Gelesen</button>')+'</span></div></div>'; }).join('');
+}
+function claudeGelesen(id,alle){ rufeRoh('claudeGelesen',alle?{alle:true}:{id:id}).then(function(d){ S.claudeNachr=d.liste; S.claudeUngelesen=d.ungelesen; listeClaude(); badgeAktualisieren(); }).catch(function(f){ toast(fehlerText(f)); }); }
+
 function zeigeNachrichten(){
   var h='<button class="gross b-navy" onclick="nachrichtForm()">✉️ '+L('neueNachricht')+'</button><div style="height:12px"></div>';
   h+='<div id="nliste"><div class="leer">…</div></div>';
@@ -1319,7 +1343,7 @@ function ladeNachrichten(){
   return rufe('meldungen',{}).then(function(d){ S.nachr=d.liste; S.ungelesen=d.ungelesen; if(S.ansicht==='nachrichten') listeNachrichten(); badgeAktualisieren(); })
     .catch(function(f){ var el=$('nliste'); if(el) el.innerHTML='<div class="leer">'+esc(fehlerText(f))+'</div>'; });
 }
-function badgeAktualisieren(){ var b=document.querySelector('nav.unten'); if(!b) return; var alt=S.ansicht; b.outerHTML='<nav class="unten">'+navKnopf('heute','🕒')+navKnopf('kalender','📅')+navKnopf('reise','🚗')+navKnopf('nachrichten','💬')+(S.nutzer.rolle==='admin'?navKnopf('verwaltung','⚙️'):'')+'</nav>'; }
+function badgeAktualisieren(){ var b=document.querySelector('nav.unten'); if(!b) return; var alt=S.ansicht; b.outerHTML='<nav class="unten">'+navKnopf('heute','🕒')+navKnopf('kalender','📅')+navKnopf('reise','🚗')+navKnopf('nachrichten','💬')+(S.nutzer.rolle==='admin'?navKnopf('claude','🤖')+navKnopf('verwaltung','⚙️'):'')+'</nav>'; }
 function listeNachrichten(){
   var el=$('nliste'); if(!el) return; var l=S.nachr||[];
   if(!l.length){ el.innerHTML='<div class="leer">'+L('keineNachr')+'</div>'; return; }
@@ -1381,6 +1405,8 @@ function themaKopieren(){ var t=$('ntfyThema').textContent; try{ navigator.clipb
 function pushTest(){ rufe('pushTest',{}).then(function(){ toast('🧪 '+(tr()?'Gönderildi – telefona bakın / ':'')+'Gesendet – aufs Handy schauen'); }).catch(function(f){ toast(fehlerText(f)); }); }
 // Neue Nachrichten regelmäßig prüfen, solange die App offen ist
 setInterval(function(){ if(S.token&&S.nutzer&&!document.hidden) rufe('meldungen',{}).then(function(d){ var vorher=S.ungelesen||0; S.nachr=d.liste; S.ungelesen=d.ungelesen; if(S.ansicht==='nachrichten') listeNachrichten(); if(d.ungelesen!==vorher) badgeAktualisieren(); }).catch(function(){}); }, 60000);
+setInterval(function(){ if(S.token&&S.nutzer&&S.nutzer.rolle==='admin'&&!document.hidden) rufeRoh('claude',{}).then(function(d){ var vorher=S.claudeUngelesen||0; S.claudeNachr=d.liste; S.claudeUngelesen=d.ungelesen; if(S.ansicht==='claude') listeClaude(); if(d.ungelesen!==vorher) badgeAktualisieren(); }).catch(function(){}); }, 120000);
+if(location.hash==='#claude'){ S.ansicht='claude'; try{ history.replaceState(null,'',location.pathname); }catch(e){} }
 if(location.hash==='#nachrichten'){ S.ansicht='nachrichten'; try{ history.replaceState(null,'',location.pathname); }catch(e){} }
 
 init();

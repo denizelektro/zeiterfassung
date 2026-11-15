@@ -117,7 +117,9 @@ var AKTIONEN = {
   lohnlisteDateien:{ admin: true, fn: function (ich, d) { return lohnlisteDateien_(ich, d); } },
   importEintraege:{ admin: true, fn: function (ich, d) { return importEintraege_(d); } },
   kiSchluessel:   { admin: true, fn: function (ich, d) { return kiSchluessel_(d); } },
-  kiDiagnose:     { admin: true, ohneLock: true, fn: function (ich, d) { return kiDiagnose_(d); } }
+  kiDiagnose:     { admin: true, ohneLock: true, fn: function (ich, d) { return kiDiagnose_(d); } },
+  claude:         { admin: true, ohneLock: true, fn: function (ich, d) { return claudeListe_(); } },
+  claudeGelesen:  { admin: true, ohneLock: true, fn: function (ich, d) { return claudeGelesen_(d); } }
 };
 
 /* ============================ KI (Google Gemini) ============================ */
@@ -348,6 +350,7 @@ function startDaten_(ich) {
     kiAktiv: kiAktiv_()
   };
   if (ich.rolle === 'admin') {
+    try { r.claudeUngelesen = claudeZahl_(); } catch (x) { r.claudeUngelesen = 0; }
     r.mitarbeiter = zeilen_(T.MA).map(function (m) { var o = oeffentlich_(m); o.aktiv = m.aktiv !== 'nein';
       o.urlaubJahr = Number(m.urlaubJahr || 0); o.urlaubStartGenommen = Number(m.urlaubStartGenommen || 0); o.urlaubStartJahr = m.urlaubStartJahr || '';
       o.stundenlohn = Number(m.stundenlohn || 0); o.saldoStart = m.saldoStart === '' || m.saldoStart == null ? '' : Number(m.saldoStart); o.saldoMonat = m.saldoMonat || ''; return o; });
@@ -1402,4 +1405,77 @@ function reiseKm_(ma, datum) {
   var hin = strecke(p.abfahrt, p.ankunftBs), rueck = strecke(p.abfahrtBs, p.ankunft);
   var km = (hin || 0) + (rueck || 0);
   return { hin: hin == null ? null : Math.round(hin), rueck: rueck == null ? null : Math.round(rueck), km: Math.round(km) };
+}
+
+
+/* ============================ Claude-Nachrichten (nur Chef) ============================
+ * Claude legt Nachrichten als kleine JSON-Dateien in
+ *   Meine Ablage › Zeiterfassung › Claude-Nachrichten
+ * ab: {"titel": "...", "text": "...", "art": "bericht|mahnung|frage|info", "link": "https://...", "zeit": "2026-11-18 18:40"}
+ * Gelesen/Push-Status steht in der Dateibeschreibung.
+ * Einmal im Editor die Funktion  claudeEinrichten  ausführen (legt die 10-Minuten-Prüfung für die Push-Meldung an).
+ */
+function claudeOrdner_() { return ordner_(ordner_(DriveApp.getRootFolder(), APP.ordner), 'Claude-Nachrichten'); }
+
+/** Nur zählen (schnell, ohne Dateien zu lesen) – für das rote Zähler-Symbol. */
+function claudeZahl_() {
+  var it = claudeOrdner_().getFiles(), n = 0;
+  while (it.hasNext()) { var f = it.next(); if (!f.isTrashed() && String(f.getDescription() || '').indexOf('gelesen') < 0) n++; }
+  return n;
+}
+
+function claudeListe_() {
+  var it = claudeOrdner_().getFiles(), liste = [], ungelesen = 0;
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.isTrashed()) continue;
+    var m = {};
+    try { m = JSON.parse(f.getBlob().getDataAsString('UTF-8')); } catch (x) { m = { titel: f.getName(), text: f.getBlob().getDataAsString('UTF-8') }; }
+    var gelesen = String(f.getDescription() || '').indexOf('gelesen') >= 0;
+    if (!gelesen) ungelesen++;
+    liste.push({ id: f.getId(), titel: String(m.titel || f.getName()), text: String(m.text || ''), art: String(m.art || 'info'), link: String(m.link || ''),
+      zeit: String(m.zeit || Utilities.formatDate(f.getDateCreated(), APP.zeitzone, 'yyyy-MM-dd HH:mm')), gelesen: gelesen });
+  }
+  liste.sort(function (a, b) { return a.zeit < b.zeit ? 1 : -1; });
+  return { liste: liste.slice(0, 60), ungelesen: ungelesen };
+}
+
+function claudeGelesen_(d) {
+  var ids = d.alle ? claudeListe_().liste.filter(function (m) { return !m.gelesen; }).map(function (m) { return m.id; }) : [String(d.id || '')];
+  ids.forEach(function (id) {
+    try { var f = DriveApp.getFileById(id); if (f.getParents().next().getId() !== claudeOrdner_().getId()) return;
+      var b = String(f.getDescription() || ''); if (b.indexOf('gelesen') < 0) f.setDescription((b + ' gelesen').trim()); } catch (x) {}
+  });
+  return claudeListe_();
+}
+
+/** Läuft alle 10 Minuten: neue Claude-Nachrichten als Push (ntfy) an den Chef melden. */
+function claudePushPruefen() {
+  var it = claudeOrdner_().getFiles(), chefs = zeilen_(T.MA).filter(function (x) { return x.rolle === 'admin' && x.aktiv !== 'nein'; });
+  while (it.hasNext()) {
+    var f = it.next(), b = String(f.getDescription() || '');
+    if (f.isTrashed() || b.indexOf('gepusht') >= 0) continue;
+    var m = {}; try { m = JSON.parse(f.getBlob().getDataAsString('UTF-8')); } catch (x) { m = { titel: f.getName() }; }
+    var titel = '🤖 Claude: ' + String(m.titel || f.getName()).slice(0, 80);
+    var text = String(m.text || '').slice(0, 300) || 'Neue Nachricht von Claude';
+    chefs.forEach(function (c) { pushClaude_(c.id, titel, text, m.art === 'mahnung' || m.art === 'frage' ? 5 : 4); });
+    f.setDescription((b + ' gepusht').trim());
+  }
+}
+
+function pushClaude_(maId, titel, text, prio) {
+  try {
+    var m = finde_(T.MA, maId);
+    if (!m || !m.ntfy) return;
+    UrlFetchApp.fetch('https://ntfy.sh/', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      payload: JSON.stringify({ topic: m.ntfy, title: titel, message: text, priority: prio || 4, click: APP.appUrl + '#claude' }) });
+  } catch (e) {}
+}
+
+/** Einmal im Editor ausführen: legt die regelmäßige Push-Prüfung an. */
+function claudeEinrichten() {
+  ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === 'claudePushPruefen') ScriptApp.deleteTrigger(tr); });
+  ScriptApp.newTrigger('claudePushPruefen').timeBased().everyMinutes(10).create();
+  claudeOrdner_();
+  Logger.log('Claude-Nachrichten eingerichtet. Ordner: ' + claudeOrdner_().getUrl());
 }
