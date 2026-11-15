@@ -512,6 +512,8 @@ function eintragSpeichern_(ich, d) {
     .map(function (m) {
       var o = { menge: String(m.menge || '').slice(0, 10), einheit: String(m.einheit || '').slice(0, 10), text: String(m.text).slice(0, 120) };
       if (m.haendler) o.haendler = String(m.haendler).slice(0, 40);
+      var au = String(m.aufschlag == null ? '' : m.aufschlag).replace(',', '.').replace('+', '').trim();
+      if (au !== '' && !isNaN(Number(au))) o.aufschlag = Math.round(Number(au) * 10) / 10;
       var p = String(m.preis == null ? '' : m.preis).replace(',', '.').trim();
       if (p !== '' && !isNaN(Number(p))) o.preis = Math.round(Number(p) * 100) / 100;
       return o;
@@ -1079,8 +1081,9 @@ function abrechnung_(d) {
     p.stunden += h; p.tage[e.datum] = 1;
     km += Number(e.km || 0);
     (e.material || []).forEach(function (m) {
-      var k = String(m.text).trim().toLowerCase() + '|' + (m.einheit || '') + '|' + String(m.haendler || '').toLowerCase();
-      var z = mat[k] || (mat[k] = { text: String(m.text).trim(), einheit: m.einheit || '', haendler: m.haendler || '', menge: 0, ek: 0, ohnePreis: false });
+      var au = m.aufschlag == null || m.aufschlag === '' ? null : Number(m.aufschlag);
+      var k = String(m.text).trim().toLowerCase() + '|' + (m.einheit || '') + '|' + String(m.haendler || '').toLowerCase() + '|' + (au == null ? '' : au);
+      var z = mat[k] || (mat[k] = { text: String(m.text).trim(), einheit: m.einheit || '', haendler: m.haendler || '', aufschlag: au, menge: 0, ek: 0, ohnePreis: false });
       var n = Number(String(m.menge || '').replace(',', '.')); z.menge += isNaN(n) ? 0 : n;
       if (m.preis != null && m.preis !== '') z.ek += Number(m.preis); else z.ohnePreis = true;
     });
@@ -1214,7 +1217,7 @@ function abrechnungTabelle_(d) {
   z.push(['', '', '', '', '', '']);
   z.push(['MATERIAL', 'Menge', 'Einheit', 'EK gesamt', 'VK netto (+' + Math.round(auf * 100) + ' %)', 'Hinweis']);
   var matStart = z.length + 1;
-  a.material.forEach(function (m) { var r = z.length + 1; z.push([m.text, m.menge, m.einheit, m.ek || '', '=D' + r + '*' + (1 + auf), [m.haendler, m.ohnePreis ? 'Preis fehlt' : ''].filter(String).join(' · ')]); });
+  a.material.forEach(function (m) { var r = z.length + 1; z.push([m.text, m.menge, m.einheit, m.ek || '', '=D' + r + '*' + (1 + (m.aufschlag == null ? auf : m.aufschlag / 100)), [m.haendler, m.aufschlag == null ? '' : (m.aufschlag >= 0 ? '+' : '') + m.aufschlag + ' %', m.ohnePreis ? 'Preis fehlt' : ''].filter(String).join(' · ')]); });
   var matEnde = z.length;
   z.push(['Summe Material', '', '', a.material.length ? '=SUM(D' + matStart + ':D' + matEnde + ')' : 0, a.material.length ? '=SUM(E' + matStart + ':E' + matEnde + ')' : 0, '']);
   var matSumme = z.length;

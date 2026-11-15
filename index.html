@@ -137,7 +137,7 @@
   .mat .eing{padding:11px 8px}
   .mat .x{color:var(--rot);font-size:20px}
   .mat{border-bottom:1px dashed #dde2e7;padding-bottom:6px}
-  .mat .hd{grid-column:1/3} .mat .pr{grid-column:3} .mat .pInfo{grid-column:1/5;margin-top:-2px}
+  .mat .mat2{grid-column:1/5;display:flex;gap:6px} .mat .mat2 .hd{flex:1.3;min-width:0} .mat .mat2 .au{width:66px;flex:none} .mat .mat2 .pr{flex:1;min-width:0} .mat .pInfo{grid-column:1/5;margin-top:-2px}
   .mat .such{font-size:17px;color:inherit}
   .kiReihe{display:flex;gap:6px;margin-bottom:8px}
   .kiReihe button{flex:1;min-width:0;padding:10px 2px;border-radius:12px;background:#fff;border:1px solid #cfd5dc;font-weight:700;font-size:.85rem;line-height:1.15}
@@ -910,11 +910,18 @@ function matZeile(m,i){
     '<select class="eing" data-i="'+i+'" data-k="einheit">'+EINHEITEN.map(function(x){return '<option value="'+x[0]+'" '+(m.einheit===x[0]?'selected':'')+'>'+(tr()&&x[1]!==x[0]?x[1]+' / ':'')+x[0]+'</option>';}).join('')+'</select>'+
     '<input class="eing" placeholder="'+(tr()?'NYM 3x1,5':'z. B. NYM 3x1,5')+'" value="'+esc(m.text)+'" data-i="'+i+'" data-k="text">'+
     '<button class="x" onclick="formLesen();F.material.splice('+i+',1);if(!F.material.length)F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">✕</button>'+
-    '<select class="eing hd" data-i="'+i+'" data-k="haendler" onchange="haendlerGewaehlt(this,'+i+')"><option value="">'+(tr()?'Mağaza / ':'')+'Händler…</option>'+hl.map(function(x){ return '<option '+(m.haendler===x?'selected':'')+'>'+esc(x)+'</option>'; }).join('')+'<option value="+">＋ '+(tr()?'Yeni / ':'')+'Neu…</option></select>'+
-    '<input class="eing pr" inputmode="decimal" placeholder="€ '+(tr()?'toplam':'gesamt')+'" value="'+(m.preis==null?'':esc(String(m.preis).replace('.',',')))+'" data-i="'+i+'" data-k="preis">'+
-    '<span></span>'+
+    '<div class="mat2"><select class="eing hd" data-i="'+i+'" data-k="haendler" onchange="haendlerGewaehlt(this,'+i+')"><option value="">'+(tr()?'Mağaza / ':'')+'Händler…</option>'+hl.map(function(x){ return '<option '+(m.haendler===x?'selected':'')+'>'+esc(x)+'</option>'; }).join('')+'<option value="+">＋ '+(tr()?'Yeni / ':'')+'Neu…</option></select>'+
+    (adm?'<input class="eing au" inputmode="text" placeholder="± %" value="'+(m.aufschlag==null?'':esc(String(m.aufschlag).replace('.',',')))+'" data-i="'+i+'" data-k="aufschlag" oninput="matVk('+i+')">':'')+
+    '<input class="eing pr" inputmode="decimal" placeholder="€ '+(adm?'EK ':'')+(tr()?'toplam':'gesamt')+'" value="'+(m.preis==null?'':esc(String(m.preis).replace('.',',')))+'" data-i="'+i+'" data-k="preis" oninput="matVk('+i+')"></div>'+
+    (adm?'<div class="klein pInfo" id="vk'+i+'">'+matVkText(m.preis,m.aufschlag)+'</div>':'')+
     (m.preisInfo?'<div class="klein pInfo">'+m.preisInfo+'</div>':'')+'</div>';
 }
+function matVkText(p,a){
+  var ek=zahl(p), au=String(a==null?'':a).replace('+','').trim(); if(!ek) return '';
+  var pz=au===''?0:zahl(au), vk=ek*(1+pz/100);
+  return '→ '+(pz?(pz>0?'+':'')+String(pz).replace('.',',')+' % = ':'')+'<b>'+euro(vk)+'</b> brutto · '+euro(vk/1.19)+' netto';
+}
+function matVk(i){ var row=document.querySelectorAll('#fMat .mat')[i]; if(!row) return; var p=row.querySelector('[data-k="preis"]'), a=row.querySelector('[data-k="aufschlag"]'), o=$('vk'+i); if(o) o.innerHTML=matVkText(p&&p.value, a&&a.value); }
 function haendlerGewaehlt(sel,i){
   formLesen();
   if(sel.value==='+'){
@@ -989,7 +996,7 @@ function formSpeichern(){
     if(!e.baustelle) return fFehler(Lt('BAUSTELLE_FEHLT'));
     if(!e.start) return fFehler(Lt('beginn')+' ?');
     if(e.ende && minDiff(e.start,e.ende)<=0) return fFehler(Lt('ENDE_VOR_BEGINN'));
-    e.material=e.material.filter(function(m){return String(m.text||'').trim();}).map(function(m){ delete m.preisInfo; if(m.haendler==='+') delete m.haendler; if(m.preis!=null){ var p=String(m.preis).replace(',','.').trim(); if(p===''||isNaN(+p)) delete m.preis; else m.preis=+p; } return m; });
+    e.material=e.material.filter(function(m){return String(m.text||'').trim();}).map(function(m){ delete m.preisInfo; if(m.haendler==='+') delete m.haendler; if(m.aufschlag!=null){ var au=String(m.aufschlag).replace(',','.').replace('+','').trim(); if(au===''||isNaN(+au)) delete m.aufschlag; else m.aufschlag=+au; } if(m.preis!=null){ var p=String(m.preis).replace(',','.').trim(); if(p===''||isNaN(+p)) delete m.preis; else m.preis=+p; } return m; });
     e.km = e.km===''?'':String(e.km).replace(',','.');
   }
   var neu=!e.id; if(neu) e.id=uuid();
@@ -1315,7 +1322,7 @@ function abrechnungHtml(){
     '<div class="reihe"><div><label class="f">Von</label><input type="date" class="eing" id="abVon" value="'+AB.von+'" onchange="AB.von=this.value;AB.daten=null"></div><div><label class="f">Bis</label><input type="date" class="eing" id="abBis" value="'+AB.bis+'" onchange="AB.bis=this.value;AB.daten=null"></div></div>'+
     '<div style="height:10px"></div><button class="mittel b-navy" style="color:#fff" onclick="abLaden()">Anzeigen</button></div>';
   var a=AB.daten; if(!a) return h;
-  var auf=abAufschlag(), lohn=0, ek=0;
+  var auf=abAufschlag(), lohn=0, ek=0, vkSum=0;
   h+='<div class="karte"><p class="titel">'+esc(a.baustelle.name)+'</p>'+(a.baustelle.adresse?'<div class="klein">'+esc(a.baustelle.adresse)+'</div>':'')+
      '<div class="klein">'+deD(a.von)+' – '+deD(a.bis)+'</div>'+abStatusHtml(a)+(a.offen?'<div class="hinweis" style="margin-top:8px">⚠ '+a.offen+' Eintrag/Einträge noch ohne Feierabend – Stunden fehlen dort.</div>':'')+'</div>';
   h+='<div class="karte"><p class="titel">⏱ Arbeitszeit</p>'+(a.personen.length?a.personen.map(function(p){ var sz=abSatz(p.id), sum=p.stunden*zahl(sz); lohn+=sum;
@@ -1323,11 +1330,11 @@ function abrechnungHtml(){
      '<div style="text-align:right;font-weight:800;margin-top:6px">'+euro(lohn)+'</div></div>';
   var fehlt=0;
   h+='<div class="karte"><p class="titel">📦 Material <span class="klein">Aufschlag <input class="eing" style="width:58px;padding:6px;display:inline-block" inputmode="decimal" value="'+esc(auf)+'" onchange="LS.setItem(\'ze_aufschlag\',this.value);zeigeVerwaltung()"> %</span></p>'+
-     (a.material.length?a.material.map(function(m){ ek+=m.ek; if(m.ohnePreis) fehlt++;
-       return '<div class="zeileL"><div><b>'+esc(String(m.menge).replace('.',','))+' '+esc(m.einheit)+'</b> '+esc(m.text)+(m.ohnePreis?' <span class="pill p-gelb">Preis fehlt</span>':'')+'</div><div style="text-align:right;white-space:nowrap"><div class="klein">EK '+euro(m.ek)+'</div><b>'+euro(m.ek*(1+zahl(auf)/100))+'</b></div></div>'; }).join(''):'<div class="leer">Kein Material</div>')+
-     '<div style="text-align:right;margin-top:6px"><span class="klein">EK '+euro(ek)+'</span> · <b>VK '+euro(ek*(1+zahl(auf)/100))+'</b></div>'+
+     (a.material.length?a.material.map(function(m){ var pz=m.aufschlag==null?zahl(auf):m.aufschlag, v=m.ek*(1+pz/100); ek+=m.ek; vkSum+=v; if(m.ohnePreis) fehlt++;
+       return '<div class="zeileL"><div><b>'+esc(String(m.menge).replace('.',','))+' '+esc(m.einheit)+'</b> '+esc(m.text)+(m.haendler?' <span class="klein">· '+esc(m.haendler)+'</span>':'')+(m.ohnePreis?' <span class="pill p-gelb">Preis fehlt</span>':'')+'</div><div style="text-align:right;white-space:nowrap"><div class="klein">EK '+euro(m.ek)+(m.aufschlag!=null?' · '+(m.aufschlag>=0?'+':'')+m.aufschlag+' %':'')+'</div><b>'+euro(v)+'</b></div></div>'; }).join(''):'<div class="leer">Kein Material</div>')+
+     '<div style="text-align:right;margin-top:6px"><span class="klein">EK '+euro(ek)+'</span> · <b>VK '+euro(vkSum)+'</b></div>'+
      (fehlt?'<div class="klein" style="margin-top:6px">Preise fehlen? Eintrag im Kalender öffnen und das €‑Feld ausfüllen.</div>':'')+'</div>';
-  var ges=lohn+ek*(1+zahl(auf)/100);
+  var ges=lohn+vkSum;
   h+='<div class="karte" style="text-align:center"><div class="klein">Gesamt netto</div><div style="font-size:1.6rem;font-weight:800;color:var(--navy)">'+euro(ges)+'</div><div class="klein">zzgl. 19 % MwSt. = '+euro(ges*1.19)+' brutto'+(a.km?' · '+fStd(a.km)+' km gefahren':'')+'</div></div>';
   if(a.belege.length) h+='<div class="karte"><p class="titel">🧾 Belege</p><div class="belege">'+a.belege.map(function(b){ return '<span><a href="https://drive.google.com/file/d/'+esc(b.id)+'/view" target="_blank">🧾 '+esc(b.name.replace(/\.jpg$/,''))+'</a></span>'; }).join('')+'</div></div>';
   if(a.tage.length) h+='<div class="karte"><p class="titel">📅 Tage & Tätigkeiten</p>'+a.tage.map(function(t){ return '<div class="zeileL"><div><b>'+deD(t.datum)+'</b> · '+esc(t.ma)+(t.rechnung?' <span class="pill p-gelb">Abschlag '+esc(t.rechnung)+'</span>':'')+'<div class="klein">'+esc(t.taetigkeit||'—')+'</div></div><div class="klein" style="white-space:nowrap">'+t.start+'–'+(t.ende||'…')+' · '+fStd(t.std)+' h</div></div>'; }).join('')+'</div>';
