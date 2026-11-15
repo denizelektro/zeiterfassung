@@ -86,7 +86,9 @@
   .kal-kopf .pfeil{width:48px;height:48px;border-radius:14px;background:#fff;font-size:26px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
   .kal-kopf .mon{text-align:center;font-weight:800;font-size:1.15rem}
   .kal-wrap{overflow:hidden;touch-action:pan-y}
-  .kal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;transition:transform .22s ease,opacity .22s ease}
+  .kal{display:grid;grid-template-columns:20px repeat(7,1fr);gap:5px;transition:transform .22s ease,opacity .22s ease}
+  .kal .kwz{font-size:.62rem;color:var(--grau);font-weight:700;display:flex;align-items:flex-start;justify-content:center;padding-top:8px;writing-mode:horizontal-tb}
+  .kal.klein{gap:3px} .kal.klein .tag{aspect-ratio:auto;min-height:42px;padding:3px 1px;font-size:.85rem;border-radius:9px} .kal.klein .tag .h{font-size:.6rem} .kal.klein .kwz{padding-top:5px}
   .kal .wt{text-align:center;font-size:.72rem;color:var(--grau);font-weight:600;padding:4px 0}
   .tag{aspect-ratio:1/1.12;border-radius:12px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:5px 2px;position:relative;font-size:.95rem;border:2px solid transparent;min-width:0}
   .tag .n{font-weight:700}
@@ -457,6 +459,8 @@ function zeigeHeute(reise){
   h+='<div class="karte" style="padding-bottom:6px"><div style="font-size:1.1rem">'+datumText(heute)+'</div></div>';
   var heuteA = m.eintraege.filter(function(e){ return e.datum===heute && e.typ==='A'; });
   var R = reiseStand(heuteA);
+  var mdK=monatDaten(S.nutzer.id, monatVon(heute));
+  if(!reise && mdK) h+='<div class="karte" style="padding:8px 6px">'+kalGrid(S.nutzer.id, monatVon(heute), mdK, '', true)+'</div>';
   if(reise){ if(!S.reiseP||S.reiseP.datum!==heute) reisePLaden();
     h+=punktKarte(['abfahrt','ankunftBs','abfahrtBs','ankunft']);
     if(R.ankunft||R.km!=='') h+='<div class="karte reiseK"><div class="reiseZeit" style="font-size:1.2rem">🧾 '+(R.abfahrt||'?')+' – '+(R.ankunft||'?')+(R.km!==''?' · '+R.km+' km':'')+(R.uebern?' · 🛏':'')+' <button class="link" onclick="reiseForm()">✏️</button></div></div>';
@@ -768,24 +772,16 @@ function tagStatus(datum, zu){
 }
 
 /* ======================= KALENDER ======================= */
-function zeigeKalender(){
-  var mo=S.kalMonat, ma=S.ma||S.nutzer.id, d=monatDaten(ma,mo), h='';
-  if(S.nutzer.rolle==='admin' && S.mitarbeiter.length>1){
-    h+='<div class="filter" style="margin-bottom:8px">'+S.mitarbeiter.filter(function(x){return x.aktiv!==false;}).map(function(x){ var an=x.id===ma;
-      return '<button class="'+(an?'an f-alle':'')+'" style="'+(an?'background:var(--navy);color:#fff;border-color:var(--navy)':'')+'" onclick="S.ma=\''+x.id+'\';zeigeKalender()">👤 '+esc(x.name)+'</button>'; }).join('')+'</div>';
-  }
-  var fl=S.kalFilter||'';
-  h+='<div class="filter">'+[['','f-alle',tr()?'Hepsi<br><small>Alle</small>':'Alle'],['U','f-U','🏖 '+(tr()?'İzin':'Urlaub')],['K','f-K','🤒 '+(tr()?'Hasta':'Krank')]].map(function(f){
-    return '<button class="'+f[1]+(fl===f[0]?' an':'')+'" onclick="S.kalFilter=\''+f[0]+'\';zeigeKalender()">'+f[2]+'</button>'; }).join('')+'</div>';
-  if(fl) h+='<div class="klein" style="margin:-4px 2px 8px">'+(tr()?'Filtre açık – normal görünüm için „Alle“. ':'')+'Filter aktiv – für die normale Ansicht „Alle“ antippen. Jeden Tag kannst du trotzdem antippen und bearbeiten.</div>';
-  h+='<div class="kal-kopf"><button class="pfeil" onclick="kalBlaettern(-1)">‹</button><div class="mon">'+monatText(mo)+'</div><button class="pfeil" onclick="kalBlaettern(1)">›</button></div>';
-  if(!d){ $('inhalt').innerHTML=h+'<div class="lade" style="min-height:200px">…</div>'; ladeMonat(ma,mo).then(function(){ if(S.ansicht==='kalender'&&S.kalMonat===mo) zeigeKalender(); }).catch(function(f){ toast(fehlerText(f)); }); return; }
-  h+='<div class="kal-wrap" id="kalwrap"><div class="kal" id="kal">';
+function kalGrid(ma, mo, d, fl, klein){
+  var h='<div class="kal-wrap"'+(klein?'':' id="kalwrap"')+'><div class="kal'+(klein?' klein':'')+'"'+(klein?'':' id="kal"')+'>';
+  h+='<div class="wt kw">KW</div>';
   (tr()?TR_KURZ:DE_KURZ).forEach(function(w,i){ h+='<div class="wt">'+w+(tr()?'<br><span style="font-weight:400;opacity:.7">'+DE_KURZ[i]+'</span>':'')+'</div>'; });
   var j=+mo.slice(0,4), m=+mo.slice(5,7), erster=new Date(j,m-1,1), versatz=(erster.getDay()+6)%7, tage=new Date(j,m,0).getDate(), heute=heuteIso();
+  h+='<div class="kwz">'+kw(new Date(j,m-1,1))+'</div>';
   for(var i=0;i<versatz;i++) h+='<div class="tag leerfeld"></div>';
   var lauf = ma===S.nutzer.id ? S.laufend : (d.laufend||null);
   for(var t=1;t<=tage;t++){
+    if(t>1 && (versatz+t-1)%7===0) h+='<div class="kwz">'+kw(new Date(j,m-1,t))+'</div>';
     var iso=mo+'-'+zwei(t), dt=new Date(j,m-1,t), we=dt.getDay()===0||dt.getDay()===6, ft=feiertag(iso);
     var es=d.eintraege.filter(function(e){return e.datum===iso;});
     var u=es.some(function(e){return e.typ==='U';}), k=es.some(function(e){return e.typ==='K';}), uu=es.some(function(e){return e.typ==='UU';});
@@ -801,9 +797,24 @@ function zeigeKalender(){
     if(fl && !(fl==='U'?u:k)) kl.push('dim');
     if(iso===heute) kl.push('heute');
     if(lauf && lauf.datum===iso) kl.push('laufend');
-    h+='<button class="'+kl.join(' ')+'" onclick="tagDetail(\''+iso+'\')"><span class="n">'+t+'</span><span class="h">'+esc(unten)+'</span></button>';
+    h+='<button class="'+kl.join(' ')+'" onclick="'+(klein?'S.ma=S.nutzer.id;':'')+'tagDetail(\''+iso+'\')"><span class="n">'+t+'</span><span class="h">'+esc(unten)+'</span></button>';
   }
-  h+='</div></div>';
+  return h+'</div></div>';
+}
+function kw(dt){ var x=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())), w=x.getUTCDay()||7; x.setUTCDate(x.getUTCDate()+4-w); var j1=new Date(Date.UTC(x.getUTCFullYear(),0,1)); return Math.ceil(((x-j1)/864e5+1)/7); }
+function zeigeKalender(){
+  var mo=S.kalMonat, ma=S.ma||S.nutzer.id, d=monatDaten(ma,mo), h='';
+  if(S.nutzer.rolle==='admin' && S.mitarbeiter.length>1){
+    h+='<div class="filter" style="margin-bottom:8px">'+S.mitarbeiter.filter(function(x){return x.aktiv!==false;}).map(function(x){ var an=x.id===ma;
+      return '<button class="'+(an?'an f-alle':'')+'" style="'+(an?'background:var(--navy);color:#fff;border-color:var(--navy)':'')+'" onclick="S.ma=\''+x.id+'\';zeigeKalender()">👤 '+esc(x.name)+'</button>'; }).join('')+'</div>';
+  }
+  var fl=S.kalFilter||'';
+  h+='<div class="filter">'+[['','f-alle',tr()?'Hepsi<br><small>Alle</small>':'Alle'],['U','f-U','🏖 '+(tr()?'İzin':'Urlaub')],['K','f-K','🤒 '+(tr()?'Hasta':'Krank')]].map(function(f){
+    return '<button class="'+f[1]+(fl===f[0]?' an':'')+'" onclick="S.kalFilter=\''+f[0]+'\';zeigeKalender()">'+f[2]+'</button>'; }).join('')+'</div>';
+  if(fl) h+='<div class="klein" style="margin:-4px 2px 8px">'+(tr()?'Filtre açık – normal görünüm için „Alle“. ':'')+'Filter aktiv – für die normale Ansicht „Alle“ antippen. Jeden Tag kannst du trotzdem antippen und bearbeiten.</div>';
+  h+='<div class="kal-kopf"><button class="pfeil" onclick="kalBlaettern(-1)">‹</button><div class="mon">'+monatText(mo)+'</div><button class="pfeil" onclick="kalBlaettern(1)">›</button></div>';
+  if(!d){ $('inhalt').innerHTML=h+'<div class="lade" style="min-height:200px">…</div>'; ladeMonat(ma,mo).then(function(){ if(S.ansicht==='kalender'&&S.kalMonat===mo) zeigeKalender(); }).catch(function(f){ toast(fehlerText(f)); }); return; }
+  h+=kalGrid(ma, mo, d, fl); var heute=heuteIso();
   h+='<button class="gross b-navy" style="margin-top:10px" onclick="monatsliste()">📄 '+L('mListeKnopf')+'</button>';
   var s=d.eintraege.reduce(function(a,e){ if(e.typ==='U')a.u++; else if(e.typ==='K')a.k++; else if(e.typ==='UU'){} else {a.h+=std(e); a.t[e.datum]=1;} return a; },{h:0,u:0,k:0,t:{}});
   h+='<div class="summe"><div class="kachel"><div class="w">'+fStd(s.h)+'</div><div class="l">'+Lt('gesamt')+'</div></div><div class="kachel"><div class="w">'+Object.keys(s.t).length+'</div><div class="l">'+Lt('tage')+'</div></div>'+
