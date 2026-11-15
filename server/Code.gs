@@ -198,7 +198,7 @@ function kiDatei_(d, art) {
   if (b64.length > 9 * 1024 * 1024) throw new Error('Datei zu groß');
   if (art === 'audio' && !/^audio\//.test(mime)) mime = 'audio/webm';
   mime = mime.split(';')[0];
-  if (art === 'bild' && !/^image\//.test(mime)) mime = 'image/jpeg';
+  if (art === 'bild' && !/^image\//.test(mime) && mime !== 'application/pdf') mime = 'image/jpeg';
   return { inline_data: { mime_type: mime, data: b64 } };
 }
 function bsName_(id) { var b = id ? finde_(T.BS, id) : null; return b ? b.name : ''; }
@@ -242,7 +242,7 @@ function belegHochladen_(ich, d) {
   var datum = /^\d{4}-\d{2}-\d{2}$/.test(String(d.datum)) ? String(d.datum) : heute_();
   var teil = kiDatei_(d, 'bild');
   var ma = finde_(T.MA, ich.id);
-  var name = datum + '_' + (bsName_(d.baustelle) || 'Beleg').replace(/[\\\/:*?"<>|]/g, '-').slice(0, 40) + '_' + ((ma && ma.name) || ich.id).split(' ')[0] + '_' + Utilities.formatDate(new Date(), APP.zeitzone, 'HHmmss') + '.jpg';
+  var name = datum + '_' + (bsName_(d.baustelle) || 'Beleg').replace(/[\\\/:*?"<>|]/g, '-').slice(0, 40) + '_' + ((ma && ma.name) || ich.id).split(' ')[0] + '_' + Utilities.formatDate(new Date(), APP.zeitzone, 'HHmmss') + (teil.inline_data.mime_type === 'application/pdf' ? '.pdf' : '.jpg');
   var blob = Utilities.newBlob(Utilities.base64Decode(teil.inline_data.data), teil.inline_data.mime_type, name);
   var root = ordner_(DriveApp.getRootFolder(), APP.ordner);
   var monat = ordner_(ordner_(ordner_(root, 'Belege'), datum.slice(0, 4)), datum.slice(0, 7));

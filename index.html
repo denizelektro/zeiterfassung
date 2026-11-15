@@ -240,7 +240,7 @@ var TX = {
   pauseBisher:['Mola','Pause'], navi:['Yol tarifi','Navigation'], offenTage:['Kapatılmamış gün','Offene Tage'],
   sprechen:['Konuş','Sprechen'], reise:['Yol','Reise'], reiseLang:['Kendi arabamla','Fahrt mit eigenem Auto'],
   abfahrt:['Evden çıkış','Abfahrt von zu Hause'], ankunft:['Eve varış','Ankunft zu Hause'], kmGes:['Toplam km (gidiş + dönüş)','Kilometer gesamt (hin + zurück)'],
-  uebern:['Konaklama (eve dönmedim)','Übernachtung (nicht nach Hause)'], jetzt:['şimdi','jetzt'], uu:['Ücretsiz izin','Unbez. Urlaub'], geldNeu:['Para aldım','Geld bekommen'], betrag:['Tutar €','Betrag €'], mListe:['Aylık liste','Monatsliste'], belegKasse:['Fiş / fatura','Kassenzettel / Rechnung'], belegMat:['Malzeme / barkod','Material / Barcode'], matFoto:['Malzeme foto','Material-Foto'], fotoDoku:['Fotoğraf','Foto'], mListeKnopf:['Saat listesi ve para','Stundenzettel & Geld'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
+  uebern:['Konaklama (eve dönmedim)','Übernachtung (nicht nach Hause)'], jetzt:['şimdi','jetzt'], uu:['Ücretsiz izin','Unbez. Urlaub'], geldNeu:['Para aldım','Geld bekommen'], betrag:['Tutar €','Betrag €'], mListe:['Aylık liste','Monatsliste'], belegKasse:['Fiş / fatura','Kassenzettel / Rechnung'], belegScan:['Tarama / PDF seç','Scan / PDF auswählen'], belegMat:['Malzeme / barkod','Material / Barcode'], matFoto:['Malzeme foto','Material-Foto'], fotoDoku:['Fotoğraf','Foto'], mListeKnopf:['Saat listesi ve para','Stundenzettel & Geld'], mStd:['Ücretli saat','Bezahlte Stunden'], mLohn:['Alacak','Lohn'], mVortrag:['Önceki ay (kalan)','Vortrag Vormonat'],
   mGezahlt:['Ödenen maaş','Lohn ausgezahlt'], mVorschuss:['Avans','Vorschuss'], mRest:['Kalan','Rest'], mSchuld:['Borç','Schuld'], mGuthaben:['Alacak','Guthaben'], ergaenzen:['Düzenle','Ergänzen'], aufmass:['Ölçü','Aufmaß'],
   amTippen:['Daireyi noktaya getir, ＋ bas','Kreis auf den Punkt richten und ＋ drücken'], amSuchen:['Telefonu yavaşça sağa sola hareket ettirin…','Handy langsam hin und her bewegen – Kamera nicht abdecken'], amPunkt:['Nokta','Punkt setzen'],
   amUebernehmen:['Kaydet','Übernehmen'], amNeu:['Yeni çizgi','Neue Linie'], amZurueck:['Geri','Zurück'], amGesamt:['Toplam','Gesamt'], foto:['Fotoğraf','Foto'], beleg:['Fiş / Fatura','Beleg'], stopp:['Bitir','Fertig'],
@@ -646,7 +646,7 @@ function bsErfassen(id, was){
   S.auswahlBs=id;
   if(e) eintragForm(e.id); else { eintragForm(null, heute); F.baustelle=id; zeichneForm(); }
   if(was==='sprache') kiSprache('material');
-  else if(was==='foto'||was==='beleg') kiBild(was);
+  else if(was==='foto'||was==='beleg'||was==='scan') kiBild(was);
   else if(was==='mass') aufmass();
   else setTimeout(function(){ var el=$('fMat'); if(el) el.scrollIntoView({block:'center'}); },150);
 }
@@ -921,7 +921,7 @@ function laufendKi(was){
   if(!findeEintrag(l.id)) return toast('…');
   eintragForm(l.id);
   if(was==='sprache') kiSprache('material');
-  else if(was==='foto'||was==='beleg') kiBild(was);
+  else if(was==='foto'||was==='beleg'||was==='scan') kiBild(was);
   else if(was==='mass') aufmass();
   else setTimeout(function(){ var el=$('fMat'); if(el) el.scrollIntoView({block:'center'}); },150);
 }
@@ -930,8 +930,9 @@ function belegWahl(fn, id){
   var a=function(w){ return fn+'('+(id?'\''+id+'\',':'')+'\''+w+'\')'; };
   oeffneBlatt('<h2>🧾 '+L('beleg')+'</h2>'+
     '<button class="gross b-navy" onclick="'+a('beleg')+'">🧾 '+L('belegKasse')+'</button><div style="height:10px"></div>'+
+    '<button class="mittel b-hell" onclick="'+a('scan')+'">📄 '+L('belegScan')+'</button><div style="height:10px"></div>'+
     '<button class="gross b-hell" onclick="'+a('foto')+'">🏷 '+L('belegMat')+'</button>'+
-    '<p class="klein">'+(tr()?'Barkod veya etiketi yakından çekin. / ':'')+'Barcode oder Etikett nah fotografieren – die KI trägt das Material ein.</p>');
+    '<p class="klein">'+(tr()?'Tarama: Google Drive’da „Tara“ ile belgeyi tarayın, sonra buradan seçin. / ':'')+'Scannen: in Google Drive mit „Scannen“ (＋ › Scannen) einscannen, dann hier auswählen – auch PDF geht.<br>'+(tr()?'Barkod veya etiketi yakından çekin. / ':'')+'Material: Barcode oder Etikett nah fotografieren – die KI trägt das Material ein.</p>');
 }
 /* Baustellen-Doku: Fotos direkt in den Kundenordner › Bilder */
 function dokuFoto(bsId){
@@ -984,13 +985,17 @@ function matUebernehmen(liste){
 }
 function kiBild(art){
   if(art==='foto'&&!S.kiAktiv) return toast(Lt('KI_FEHLT'));
-  var inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.setAttribute('capture','environment');
+  var scan = art==='scan'; if(scan) art='beleg';
+  var inp=document.createElement('input'); inp.type='file';
+  if(scan) inp.accept='image/*,application/pdf'; else { inp.accept='image/*'; inp.setAttribute('capture','environment'); }
   inp.onchange=function(){
     var f=inp.files&&inp.files[0]; if(!f) return;
+    var pdf = f.type==='application/pdf' || /\.pdf$/i.test(f.name||'');
+    if(pdf && f.size>6*1024*1024) return toast('PDF zu groß (max. 6 MB)');
     formLesen(); var id='kiB_'+art; kiKnopf(id,'ki','⏳ '+Lt('kiLaeuft').split(' / ').pop());
-    bildKlein(f, art==='beleg'?2000:1400).then(function(b64){
+    (pdf ? inBase64(f) : bildKlein(f, art==='beleg'?2000:1400)).then(function(b64){
       if(art==='foto') return rufeRoh('kiFoto',{daten:b64, mime:'image/jpeg'}).then(function(r){ if(!matUebernehmen(r.material)) toast(Lt('kiNichts')); });
-      return rufeRoh('belegHochladen',{daten:b64, mime:'image/jpeg', datum:F.datum, baustelle:F.baustelle}).then(function(r){
+      return rufeRoh('belegHochladen',{daten:b64, mime:pdf?'application/pdf':'image/jpeg', datum:F.datum, baustelle:F.baustelle}).then(function(r){
         formLesen(); F.belege=(F.belege||[]).concat([r.beleg]);
         var ok=r.material&&r.material.length; if(ok) matUebernehmen(r.material); else zeichneForm();
         toast('✓ '+Lt('belegOk')+(r.summe?' · '+euro(r.summe):''));
