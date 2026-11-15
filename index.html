@@ -122,6 +122,16 @@
   .blatt{position:fixed;left:0;right:0;bottom:0;max-height:92vh;overflow:auto;background:var(--bg);border-radius:22px 22px 0 0;z-index:21;transform:translateY(105%);transition:transform .25s ease;padding:8px 14px calc(20px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto;-webkit-overflow-scrolling:touch}
   .blatt.an{transform:none}
   .blatt{max-height:92dvh}
+  #rv{position:fixed;inset:0;z-index:50;background:#e9edf1;overflow:auto;padding:12px 8px 90px}
+  .rvBlatt{background:#fff;max-width:760px;margin:0 auto;padding:22px 18px;font-family:Arial,sans-serif;font-size:13px;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+  .rvKopf{display:flex;justify-content:space-between;gap:10px} .rvLogo{width:70px;height:70px;object-fit:contain}
+  .rvAbs{font-size:9px;color:#666;text-decoration:underline;margin-bottom:6px} .rvKunde{font-size:14px;line-height:1.4}
+  .rvDatum{text-align:right;margin:10px 0} .rvTitel{font-size:18px;margin:6px 0 8px} .rvTaet{color:#444;margin-top:4px}
+  .rvTab{width:100%;border-collapse:collapse;margin-top:14px} .rvTab th{border-bottom:2px solid #333;text-align:left;padding:5px 4px;font-size:12px} .rvTab td{border-bottom:1px solid #ddd;padding:5px 4px;vertical-align:top}
+  .rvTab .r,.rvSum .r{text-align:right;white-space:nowrap} .rvSum{margin:12px 0 0 auto;min-width:60%;border-collapse:collapse} .rvSum td{padding:4px} .rvGes td{font-weight:700;border-top:2px solid #333;font-size:15px}
+  .rvFuss{margin-top:30px;border-top:1px solid #ccc;padding-top:6px;font-size:9px;color:#555;text-align:center}
+  .rvKnoepfe{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:10px;background:#fff;box-shadow:0 -2px 10px rgba(0,0,0,.1)}
+  @media print{ body>*:not(#rv){display:none!important} #rv{position:static;background:#fff;padding:0} .rvKnoepfe{display:none} .rvBlatt{box-shadow:none} }
   .blattFuss{position:sticky;bottom:calc(-20px - env(safe-area-inset-bottom));background:var(--bg);padding:8px 0 calc(28px + env(safe-area-inset-bottom));margin:0 -2px;z-index:2;box-shadow:0 -8px 12px -8px rgba(0,0,0,.15)}
   .blatt{overscroll-behavior:contain}
   html.blattOffen{overflow:hidden}
@@ -684,6 +694,7 @@ function rechnungDialog(id){
     h+='<div class="karte" id="raSumme" style="text-align:right"></div>';
     h+='<label class="f">Hinweis für Claude (optional)</label><textarea class="eing" id="raNotiz" placeholder="z. B. Anfahrt pauschal 40 €"></textarea>'+
       '<p class="klein">„Rechnung anfordern“: Claude legt mit diesen Sätzen einen <b>Entwurf</b> in sevdesk an (nichts wird verschickt). Wenn der Kunde bar zahlt, reicht dir die Summe oben.</p>'+
+      '<button class="gross b-gruen" onclick="rechnungVorschau()">👁 Vorschau für den Kunden</button><div style="height:10px"></div>'+
       '<div id="fFehler"></div><button class="gross b-navy" id="raOk" onclick="rechnungAnfordern(\''+id+'\')">✓ Rechnung anfordern</button><div style="height:8px"></div>'+
       (offen?'<button class="mittel b-hell" onclick="rechnungZurueck(\''+offen.id+'\',\''+id+'\')">Auftrag zurückziehen</button><div style="height:8px"></div>':'')+
       '<button class="mittel b-hell" onclick="bsSeite(\''+id+'\')">'+L('abbrechen')+'</button>';
@@ -704,6 +715,32 @@ function raRechnen(){
     '<div class="zeileL" style="font-size:1.25rem"><span><b>Brutto</b></span><b style="color:var(--navy)">'+euro(brutto)+'</b></div>'+
     (ab?'<div class="zeileL"><span class="klein">− bereits gezahlte Abschläge (netto)</span><span>'+euro(ab)+'</span></div><div class="zeileL"><span><b>Noch zu zahlen brutto</b></span><b>'+euro((netto-ab)*1.19)+'</b></div>':'');
   RA.werte={lohn:lohn, mat:mat, netto:netto, brutto:brutto, spz:spz, mpz:mpz};
+}
+/* Vorschau wie ein Schreiben an den Kunden (Unverbindliche Kostenaufstellung), druckbar als PDF */
+function rechnungVorschau(){
+  if(!RA) return; raRechnen(); var a=RA.a, w=RA.werte, maR={}; (S.mitarbeiter||[]).forEach(function(m){ maR[m.id]=m; });
+  var pos=[], n=0, e2=function(x){ return euro(Math.round(x*100)/100); };
+  document.querySelectorAll('[data-ra="satz"]').forEach(function(el){ var std=zahl(el.dataset.std), satz=zahl(el.value)*(1+w.spz/100); if(!std) return;
+    var m=maR[el.dataset.id]||{}; pos.push({t:(m.rolle==='admin'?'Elektroniker, Bauleitung':'Elektroniker (Geselle)')+' – Arbeitszeit', menge:std, einh:'Std.', ep:satz}); });
+  a.material.forEach(function(m){ var pz=m.aufschlag==null?w.mpz:m.aufschlag, ges=(m.ek||0)*(1+pz/100)/1.19, mg=zahl(m.menge)||1;
+    pos.push({t:m.text, menge:mg, einh:m.einheit||'Stk', ep:ges/mg}); });
+  var tage=a.tage.filter(function(t){ return !t.rechnung; }).map(function(t){ return t.datum; }).sort();
+  var taet={}; a.tage.forEach(function(t){ if(t.taetigkeit) taet[t.taetigkeit]=1; });
+  var ab=(a.status&&a.status.abschlag||[]);
+  var h='<div class="rvBlatt"><div class="rvKopf"><div><div class="rvAbs">Baudienstleistungen D. Söner · Alte Poststraße 114 · 33161 Hövelhof</div>'+
+    '<div class="rvKunde"><b>'+esc(a.baustelle.name)+'</b>'+(a.baustelle.adresse?'<br>'+esc(a.baustelle.adresse):'')+'</div></div><img src="icon-192.png" alt="" class="rvLogo"></div>'+
+    '<div class="rvDatum">Datum: '+deD(heuteIso())+'</div><h1 class="rvTitel">Unverbindliche Kostenaufstellung</h1>'+
+    (tage.length?'<div>Leistungszeitraum: '+deD(tage[0])+' – '+deD(tage[tage.length-1])+'</div>':'')+
+    (Object.keys(taet).length?'<div class="rvTaet">Ausgeführte Arbeiten: '+esc(Object.keys(taet).slice(0,12).join(', '))+'</div>':'')+
+    '<table class="rvTab"><thead><tr><th>Pos.</th><th>Beschreibung</th><th class="r">Menge</th><th class="r">Einzelpreis</th><th class="r">Gesamt</th></tr></thead><tbody>'+
+    pos.map(function(p){ n++; return '<tr><td>'+n+'</td><td>'+esc(p.t)+'</td><td class="r">'+String(Math.round(p.menge*100)/100).replace('.',',')+' '+esc(p.einh)+'</td><td class="r">'+e2(p.ep)+'</td><td class="r">'+e2(p.ep*p.menge)+'</td></tr>'; }).join('')+
+    '</tbody></table><table class="rvSum"><tr><td>Summe netto</td><td class="r">'+e2(w.netto)+'</td></tr><tr><td>zzgl. 19 % MwSt.</td><td class="r">'+e2(w.netto*0.19)+'</td></tr>'+
+    '<tr class="rvGes"><td>Gesamtbetrag brutto</td><td class="r">'+e2(w.brutto)+'</td></tr>'+
+    ab.map(function(x){ return '<tr><td>abzüglich Abschlag '+esc(x.nr)+' (netto)</td><td class="r">− '+e2(x.betrag===''?0:zahl(x.betrag))+'</td></tr>'; }).join('')+
+    (ab.length?'<tr class="rvGes"><td>Noch zu zahlen brutto</td><td class="r">'+e2((w.netto-ab.reduce(function(s,x){return s+(x.betrag===''?0:zahl(x.betrag));},0))*1.19)+'</td></tr>':'')+'</table>'+
+    '<div class="rvFuss">Baudienstleistungen D. Söner · Alte Poststraße 114 · 33161 Hövelhof · Tel. 0176 63750590 · d.soener@googlemail.com</div></div>'+
+    '<div class="rvKnoepfe"><button class="mittel b-navy" style="color:#fff" onclick="window.print()">🖨 Drucken / als PDF speichern</button><button class="mittel b-hell" onclick="document.getElementById(\'rv\').remove()">← Zurück</button></div>';
+  var d=document.createElement('div'); d.id='rv'; d.innerHTML=h; document.body.appendChild(d);
 }
 function rechnungAnfordern(id){
   var b=$('raOk'); b.disabled=true; b.innerHTML='⏳ Übersicht wird erstellt…';
