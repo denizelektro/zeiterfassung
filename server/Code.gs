@@ -23,7 +23,8 @@ var T = {
   Z:   { name: 'Zahlungen',   kopf: ['id', 'ma', 'datum', 'art', 'betrag', 'notiz'] },
   ME:  { name: 'Nachrichten', kopf: ['id', 'von', 'an', 'zeit', 'baustelle', 'art', 'text', 'gelesen'] },
   BS:  { name: 'Baustellen',  kopf: ['id', 'name', 'adresse', 'aktiv', 'erstellt', 'fuer', 'ordner'] },
-  E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert', 'belege', 'abfahrt', 'ankunft', 'uebern'] },
+  E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert', 'belege', 'abfahrt', 'ankunft', 'uebern', 'rechnung'] },
+  RE:  { name: 'Rechnungen',  kopf: ['id', 'baustelle', 'nr', 'art', 'datum', 'von', 'bis', 'betrag', 'stunden', 'erstellt'] },
   TAG: { name: 'Abschluesse', kopf: ['ma', 'datum', 'zeit'] },
   SP:  { name: 'Monatssperren', kopf: ['ma', 'monat', 'zeit', 'tabelleId', 'pdfId'] }
 };
@@ -104,6 +105,8 @@ var AKTIONEN = {
   belegHochladen: { ohneLock: true, fn: function (ich, d) { return belegHochladen_(ich, d); } },
   abrechnung:     { admin: true, fn: function (ich, d) { return abrechnung_(d); } },
   abrechnungTabelle: { admin: true, fn: function (ich, d) { return abrechnungTabelle_(d); } },
+  abrechnungMarkieren: { admin: true, fn: function (ich, d) { return abrechnungMarkieren_(d); } },
+  abrechnungLoesen: { admin: true, fn: function (ich, d) { return abrechnungLoesen_(d); } },
   baustelleNeu:   { fn: function (ich, d) { return baustelleNeu_(ich, d); } },
   meldungFoto:    { ohneLock: true, fn: function (ich, d) { return meldungFoto_(ich, d); } },
   materialAblegen:{ ohneLock: true, fn: function (ich, d) { return materialAblegen_(String(d.baustelle || '')); } },
@@ -242,8 +245,11 @@ function belegHochladen_(ich, d) {
   var name = datum + '_' + (bsName_(d.baustelle) || 'Beleg').replace(/[\\\/:*?"<>|]/g, '-').slice(0, 40) + '_' + ((ma && ma.name) || ich.id).split(' ')[0] + '_' + Utilities.formatDate(new Date(), APP.zeitzone, 'HHmmss') + '.jpg';
   var blob = Utilities.newBlob(Utilities.base64Decode(teil.inline_data.data), teil.inline_data.mime_type, name);
   var root = ordner_(DriveApp.getRootFolder(), APP.ordner);
-  var ziel = ordner_(ordner_(ordner_(root, 'Belege'), datum.slice(0, 4)), datum.slice(0, 7));
-  var f = ziel.createFile(blob);
+  var monat = ordner_(ordner_(ordner_(root, 'Belege'), datum.slice(0, 4)), datum.slice(0, 7));
+  var kunde = null; try { kunde = d.baustelle ? kundenOrdner_(String(d.baustelle)) : null; } catch (x) {}
+  var f = (kunde ? ordner_(kunde, 'Belege') : monat).createFile(blob);
+  // Für die Buchhaltung zusätzlich eine Verknüpfung im Monatsordner
+  if (kunde) { try { DriveApp.getFileById(DriveApp.createShortcut(f.getId()).getId()).moveTo(monat); } catch (x) {} }
   var aus = { beleg: { id: f.getId(), name: name }, material: [], summe: '', haendler: '' };
   if (kiAktiv_()) {
     try {
@@ -366,6 +372,10 @@ function monat_(ich, d) {
   var praefix = String(d.monat); // 'YYYY-MM'
   var eintraege = zeilen_(T.E).filter(function (e) { return e.ma === ma && String(e.datum).indexOf(praefix) === 0; }).map(eintragAus_);
   var tage = zeilen_(T.TAG).filter(function (t) { return t.ma === ma && String(t.datum).indexOf(praefix) === 0; }).map(function (t) { return t.datum; });
+  if (ich.rolle === 'admin' && eintraege.some(function (e) { return e.rechnung; })) {
+    var ra = {}; zeilen_(T.RE).forEach(function (r) { ra[r.baustelle + '|' + r.nr] = r.art; });
+    eintraege.forEach(function (e) { if (e.rechnung) e.rArt = ra[e.baustelle + '|' + e.rechnung] || 'R'; });
+  }
   return { ma: ma, monat: praefix, eintraege: eintraege, abgeschlossen: tage, gesperrt: istGesperrt_(ma, praefix), laufend: laufend_(ma), urlaubKonto: urlaubKonto_(ma, praefix.slice(0, 4)) };
 }
 
@@ -391,7 +401,8 @@ function eintragAus_(e) {
     start: e.start, ende: e.ende, pause: Number(e.pause || 0), pauseStart: e.pauseStart || '',
     taetigkeit: e.taetigkeit, material: m, km: e.km === '' ? '' : Number(e.km || 0),
     belege: belegeLesen_(e.belege),
-    abfahrt: e.abfahrt || '', ankunft: e.ankunft || '', uebern: e.uebern === 'ja'
+    abfahrt: e.abfahrt || '', ankunft: e.ankunft || '', uebern: e.uebern === 'ja',
+    rechnung: e.rechnung || ''
   };
 }
 
@@ -445,6 +456,7 @@ function eintragSpeichern_(ich, d) {
   var alt = e.id ? finde_(T.E, e.id) : null;
   var ma = alt ? alt.ma : welcherMa_(ich, e.ma);
   if (alt && ich.rolle !== 'admin' && alt.ma !== ich.id) throw new Error('Keine Berechtigung');
+  if (alt && alt.rechnung && ich.rolle !== 'admin') throw new Error('ABGERECHNET');
   pruefeDatum_(e.datum);
   pruefeSperre_(ich, ma, e.datum);
   if (alt) pruefeSperre_(ich, ma, alt.datum);
@@ -486,6 +498,7 @@ function eintragLoeschen_(ich, d) {
   var alt = finde_(T.E, d.id);
   if (!alt) return monat_(ich, { ma: d.ma, monat: d.monat });
   if (ich.rolle !== 'admin' && alt.ma !== ich.id) throw new Error('Keine Berechtigung');
+  if (alt.rechnung && ich.rolle !== 'admin') throw new Error('ABGERECHNET');
   pruefeSperre_(ich, alt.ma, alt.datum);
   loeschen_(T.E, d.id);
   return monat_(ich, { ma: alt.ma, monat: alt.datum.slice(0, 7) });
@@ -1005,8 +1018,17 @@ function abrechnung_(d) {
   var von = String(d.von || ''), bis = String(d.bis || '');
   pruefeDatum_(von); pruefeDatum_(bis);
   var namen = {}; zeilen_(T.MA).forEach(function (m) { namen[m.id] = m.name; });
-  var es = zeilen_(T.E).filter(function (e) { return e.typ === 'A' && e.baustelle === bs.id && e.datum >= von && e.datum <= bis; })
+  var rech = {}; zeilen_(T.RE).filter(function (r) { return r.baustelle === bs.id; }).forEach(function (r) { rech[r.nr] = r; });
+  var alle = zeilen_(T.E).filter(function (e) { return e.typ === 'A' && e.baustelle === bs.id && e.datum >= von && e.datum <= bis; })
     .map(eintragAus_).sort(function (a, b) { return (a.datum + a.start) < (b.datum + b.start) ? -1 : 1; });
+  // Status: offen / Abschlag / abgerechnet – endgültig abgerechnete Tage zählen nicht mehr mit
+  var status = { offen: 0, abschlag: {}, abgerechnet: {} };
+  alle.forEach(function (e) {
+    var r = e.rechnung ? rech[e.rechnung] : null, h = stunden_(e);
+    if (!r) status.offen += h;
+    else { var k = r.art === 'A' ? 'abschlag' : 'abgerechnet', z = status[k][r.nr] || (status[k][r.nr] = { nr: r.nr, datum: r.datum, betrag: r.betrag, stunden: 0 }); z.stunden += h; }
+  });
+  var es = alle.filter(function (e) { var r = e.rechnung ? rech[e.rechnung] : null; return !r || r.art === 'A'; });
   var pers = {}, mat = {}, km = 0, belege = [], tage = [], offen = 0;
   es.forEach(function (e) {
     var h = stunden_(e); if (!e.ende) offen++;
@@ -1020,7 +1042,7 @@ function abrechnung_(d) {
       if (m.preis != null && m.preis !== '') z.ek += Number(m.preis); else z.ohnePreis = true;
     });
     (e.belege || []).forEach(function (b) { belege.push({ id: b.id, name: b.name, datum: e.datum }); });
-    tage.push({ datum: e.datum, ma: namen[e.ma] || e.ma, start: e.start, ende: e.ende || '', std: Math.round(h * 100) / 100, taetigkeit: e.taetigkeit || '' });
+    tage.push({ datum: e.datum, ma: namen[e.ma] || e.ma, start: e.start, ende: e.ende || '', std: Math.round(h * 100) / 100, taetigkeit: e.taetigkeit || '', rechnung: e.rechnung || '' });
   });
   var r2 = function (x) { return Math.round(x * 100) / 100; };
   return {
@@ -1028,8 +1050,83 @@ function abrechnung_(d) {
     personen: Object.keys(pers).map(function (k) { var p = pers[k]; return { id: p.id, name: p.name, stunden: r2(p.stunden), tage: Object.keys(p.tage).length }; }),
     material: Object.keys(mat).map(function (k) { var z = mat[k]; z.menge = r2(z.menge); z.ek = r2(z.ek); return z; })
       .sort(function (a, b) { return a.text.localeCompare(b.text, 'de'); }),
-    km: r2(km), belege: belege, tage: tage
+    km: r2(km), belege: belege, tage: tage,
+    status: { offen: r2(status.offen),
+      abschlag: Object.keys(status.abschlag).map(function (k) { var z = status.abschlag[k]; z.stunden = r2(z.stunden); return z; }),
+      abgerechnet: Object.keys(status.abgerechnet).map(function (k) { var z = status.abgerechnet[k]; z.stunden = r2(z.stunden); return z; }) },
+    rechnungen: Object.keys(rech).map(function (k) { var r = rech[k]; return { nr: r.nr, art: r.art, datum: r.datum, von: r.von, bis: r.bis, betrag: r.betrag, stunden: r.stunden }; })
+      .sort(function (a, b) { return a.datum < b.datum ? -1 : 1; })
   };
+}
+
+/* ---------- Abrechnungs-Status: Einträge als berechnet markieren ---------- */
+function abrechnungMarkieren_(d) {
+  kopfPruefen_(T.E);
+  var bs = finde_(T.BS, String(d.baustelle || '')); if (!bs) throw new Error('Baustelle wählen');
+  var nr = String(d.nr || '').trim().slice(0, 40); if (!nr) throw new Error('Rechnungsnummer fehlt');
+  var art = d.art === 'A' ? 'A' : 'R', von = String(d.von || ''), bis = String(d.bis || '');
+  pruefeDatum_(von); pruefeDatum_(bis);
+  var rech = {}; zeilen_(T.RE).forEach(function (r) { if (r.baustelle === bs.id) rech[r.nr] = r; });
+  if (rech[nr]) throw new Error('Diese Nummer gibt es bei der Baustelle schon');
+  // Abschlag: nur offene Tage · Rechnung: offene + per Abschlag berechnete Tage
+  var es = zeilen_(T.E).filter(function (e) {
+    if (e.typ !== 'A' || e.baustelle !== bs.id || e.datum < von || e.datum > bis || !e.ende) return false;
+    var r = e.rechnung ? rech[e.rechnung] : null;
+    return !r || (art === 'R' && r.art === 'A');
+  });
+  if (!es.length && art === 'A' && !d.betrag) throw new Error('Keine offenen Stunden in diesem Zeitraum');
+  var std = 0, sh = blatt_(T.E), w = sh.getDataRange().getValues(), sp = T.E.kopf.indexOf('rechnung') + 1, ids = {};
+  es.forEach(function (e) { ids[e.id] = 1; std += stunden_(eintragAus_(e)); });
+  for (var i = 1; i < w.length; i++) if (ids[String(w[i][0])]) sh.getRange(i + 1, sp).setNumberFormat('@').setValue(nr);
+  cacheLeeren_(T.E);
+  var betrag = String(d.betrag == null ? '' : d.betrag).replace(',', '.').trim();
+  schreiben_(T.RE, { id: Utilities.getUuid().slice(0, 8), baustelle: bs.id, nr: nr, art: art, datum: /^\d{4}-\d{2}-\d{2}$/.test(String(d.datum)) ? d.datum : heute_(),
+    von: von, bis: bis, betrag: betrag && !isNaN(Number(betrag)) ? Math.round(Number(betrag) * 100) / 100 : '', stunden: Math.round(std * 100) / 100, erstellt: jetzt_() });
+  try { kundenUebersicht_(bs.id); } catch (x) {}
+  return abrechnung_(d);
+}
+function abrechnungLoesen_(d) {
+  var bs = finde_(T.BS, String(d.baustelle || '')); if (!bs) throw new Error('Baustelle wählen');
+  var nr = String(d.nr || ''), r = zeilen_(T.RE).filter(function (x) { return x.baustelle === bs.id && x.nr === nr; })[0];
+  if (!r) throw new Error('Nicht gefunden');
+  var sh = blatt_(T.E), w = sh.getDataRange().getValues(), sp = T.E.kopf.indexOf('rechnung') + 1, kb = T.E.kopf.indexOf('baustelle');
+  // Tage, die vorher per Abschlag liefen, bekommen ihren Abschlag zurück (sonst offen)
+  for (var i = 1; i < w.length; i++) if (String(w[i][sp - 1]) === nr && String(w[i][kb]) === bs.id) sh.getRange(i + 1, sp).setValue('');
+  cacheLeeren_(T.E);
+  loeschen_(T.RE, r.id);
+  if (r.art === 'R') {
+    // frühere Abschläge im Zeitraum wieder zuordnen
+    zeilen_(T.RE).filter(function (x) { return x.baustelle === bs.id && x.art === 'A'; }).forEach(function (a) {
+      var w2 = sh.getDataRange().getValues();
+      for (var j = 1; j < w2.length; j++) {
+        var dt = wert_(w2[j][T.E.kopf.indexOf('datum')], 'datum');
+        if (String(w2[j][kb]) === bs.id && !w2[j][sp - 1] && dt >= a.von && dt <= a.bis && String(w2[j][T.E.kopf.indexOf('typ')]) === 'A') sh.getRange(j + 1, sp).setNumberFormat('@').setValue(a.nr);
+      }
+    });
+    cacheLeeren_(T.E);
+  }
+  try { kundenUebersicht_(bs.id); } catch (x) {}
+  return abrechnung_(d);
+}
+/** Übersicht je Kunde: welche Rechnung deckt welche Tage ab (Rechn.-Angebot › Jahr › <Baustelle> vorläufige Rechnung). */
+function kundenUebersicht_(bsId) {
+  var bs = finde_(T.BS, bsId), rs = zeilen_(T.RE).filter(function (r) { return r.baustelle === bsId; }).sort(function (a, b) { return a.datum < b.datum ? -1 : 1; });
+  var offen = zeilen_(T.E).filter(function (e) { return e.typ === 'A' && e.baustelle === bsId && !e.rechnung && e.ende; }).map(eintragAus_);
+  var titel = 'Abrechnungsstand – ' + bs.name, z = [];
+  z.push([titel, '', '', '', '', '']); z.push(['Stand ' + deDatum_(heute_()), '', '', '', '', '']); z.push(['', '', '', '', '', '']);
+  z.push(['Nr.', 'Art', 'Datum', 'Zeitraum', 'Stunden', 'Betrag']);
+  rs.forEach(function (r) { z.push([r.nr, r.art === 'A' ? 'Abschlag' : 'Rechnung', deDatum_(r.datum), deDatum_(r.von) + ' – ' + deDatum_(r.bis), Number(r.stunden || 0), r.betrag === '' ? '' : Number(r.betrag)]); });
+  var oh = offen.reduce(function (a, e) { return a + stunden_(e); }, 0), od = offen.map(function (e) { return e.datum; }).sort();
+  z.push(['', '', '', '', '', '']);
+  z.push(['NOCH OFFEN', '', '', od.length ? deDatum_(od[0]) + ' – ' + deDatum_(od[od.length - 1]) : '–', Math.round(oh * 100) / 100, '']);
+  var ss = SpreadsheetApp.create(titel), sh = ss.getSheets()[0];
+  sh.getRange(1, 1, z.length, 6).setValues(z);
+  sh.getRange(1, 1).setFontSize(14).setFontWeight('bold'); sh.getRange(4, 1, 1, 6).setFontWeight('bold'); sh.getRange(z.length, 1, 1, 6).setFontWeight('bold');
+  sh.getRange(5, 6, Math.max(1, z.length - 4), 1).setNumberFormat('#,##0.00 €'); sh.setColumnWidth(4, 200);
+  var basis = DriveApp.getFolderById(APP.rechnungsOrdnerId);
+  var ziel = ordner_(ordner_(basis, heute_().slice(0, 4)), (bs.name + ' vorläufige Rechnung').replace(/[\\\/]/g, '-'));
+  var alt = ziel.getFilesByName(titel); while (alt.hasNext()) alt.next().setTrashed(true);
+  DriveApp.getFileById(ss.getId()).moveTo(ziel);
 }
 
 function abrechnungTabelle_(d) {
@@ -1057,10 +1154,18 @@ function abrechnungTabelle_(d) {
   var matSumme = z.length;
   z.push(['', '', '', '', '', '']);
   z.push(['GESAMT NETTO', '', '', '', '=E' + lohnSumme + '+E' + matSumme, '']);
+  var gesamtZeile = z.length;
+  if (a.status.abschlag.length) {
+    z.push(['Davon schon per Abschlag berechnet:', '', '', '', '', '']);
+    var abStart = z.length + 1;
+    a.status.abschlag.forEach(function (x) { z.push(['  Abschlag ' + x.nr + ' vom ' + deDatum_(x.datum), x.stunden + ' h', '', '', x.betrag === '' ? 0 : -Number(x.betrag), x.betrag === '' ? 'Betrag fehlt' : '']); });
+    z.push(['REST NETTO (Schlussrechnung)', '', '', '', '=E' + gesamtZeile + '+SUM(E' + abStart + ':E' + z.length + ')', '']);
+  }
+  if (a.status.abgerechnet.length) z.push(['Nicht enthalten (schon abgerechnet): ' + a.status.abgerechnet.map(function (x) { return x.nr + ' (' + x.stunden + ' h)'; }).join(', '), '', '', '', '', '']);
   z.push(['Gefahrene km', a.km, '', '', '', '']);
   z.push(['', '', '', '', '', '']);
   z.push(['TAGE', 'Mitarbeiter', 'Zeit', 'Std.', 'Tätigkeit', '']);
-  a.tage.forEach(function (t) { z.push([deDatum_(t.datum), t.ma, t.start + '–' + (t.ende || '…'), t.std, t.taetigkeit, '']); });
+  a.tage.forEach(function (t) { z.push([deDatum_(t.datum), t.ma, t.start + '–' + (t.ende || '…'), t.std, t.taetigkeit, t.rechnung ? 'Abschlag ' + t.rechnung : '']); });
   if (a.belege.length) {
     z.push(['', '', '', '', '', '']); z.push(['BELEGE', '', '', '', '', '']);
     a.belege.forEach(function (b) { z.push([deDatum_(b.datum), b.name, '', '', 'https://drive.google.com/file/d/' + b.id + '/view', '']); });
@@ -1070,7 +1175,7 @@ function abrechnungTabelle_(d) {
   [5, matStart - 1, lohnSumme, matSumme, matSumme + 2].forEach(function (r) { sh.getRange(r, 1, 1, 6).setFontWeight('bold'); });
   sh.getRange(lohnStart, 4, Math.max(1, lohnSumme - lohnStart + 1), 2).setNumberFormat('#,##0.00 €');
   sh.getRange(matStart, 4, Math.max(1, matSumme - matStart + 1), 2).setNumberFormat('#,##0.00 €');
-  sh.getRange(matSumme + 2, 5).setNumberFormat('#,##0.00 €');
+  sh.getRange(gesamtZeile, 5, Math.max(1, a.status.abschlag.length ? a.status.abschlag.length + 2 : 1), 1).setNumberFormat('#,##0.00 €');
   sh.setColumnWidth(1, 260); sh.setColumnWidth(5, 280);
   // Ablage: Rechn.-Angebot › <Jahr> › <Baustelle> vorläufige Rechnung
   var basis; try { basis = DriveApp.getFolderById(APP.rechnungsOrdnerId); } catch (x) { basis = ordner_(ordner_(DriveApp.getRootFolder(), APP.ordner), 'Abrechnungen'); }
@@ -1202,6 +1307,32 @@ function alsXlsx_(ss, ordner, name) {
   var f = ordner.createFile(blob);
   DriveApp.getFileById(ss.getId()).setTrashed(true);
   return f;
+}
+/* ---------- Stundennachweise automatisch aktuell halten (stündlicher Auslöser) ---------- */
+function stundenzettelAuto() {
+  var props = PropertiesService.getScriptProperties(), alt = {};
+  try { alt = JSON.parse(props.getProperty('SZ_HASH') || '{}'); } catch (x) {}
+  var admin = zeilen_(T.MA).filter(function (m) { return m.rolle === 'admin'; })[0]; if (!admin) return;
+  var ich = { id: admin.id, rolle: 'admin' }, h = new Date(), monate = [];
+  for (var i = 0; i < 3; i++) { var dt = new Date(h.getFullYear(), h.getMonth() - i, 15); monate.push(Utilities.formatDate(dt, APP.zeitzone, 'yyyy-MM')); }
+  var t0 = Date.now();
+  zeilen_(T.MA).filter(function (m) { return m.rolle !== 'admin' && m.aktiv !== 'nein'; }).forEach(function (m) {
+    monate.forEach(function (mo) {
+      if (Date.now() - t0 > 4 * 60 * 1000) return; // Rest beim nächsten Lauf
+      var L = lohnliste_(ich, { ma: m.id, monat: mo });
+      if (!L.tage.some(function (t) { return t.zeilen.some(function (z) { return z.typ !== 'F'; }) || t.geld.length; })) return;
+      var hash = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(L)));
+      var k = m.id + '|' + mo; if (alt[k] === hash) return;
+      lohnlisteDateien_(ich, { ma: m.id, monat: mo }); alt[k] = hash;
+      props.setProperty('SZ_HASH', JSON.stringify(alt));
+    });
+  });
+}
+/** Einmal im Editor ausführen: richtet den stündlichen Auslöser ein. */
+function automatikEinrichten() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'stundenzettelAuto') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('stundenzettelAuto').timeBased().everyHours(1).create();
+  stundenzettelAuto();
 }
 function zeitWert_(hhmm) { if (!hhmm) return ''; var p = String(hhmm).split(':'); return (Number(p[0]) * 60 + Number(p[1])) / 1440; }
 
