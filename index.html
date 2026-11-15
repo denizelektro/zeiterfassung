@@ -887,7 +887,9 @@ function eintragForm(id, datum){
   if(!F.material.length) F.material.push({menge:'',einheit:'Stk',text:''});
   zeichneForm();
 }
+function formSig(f){ return JSON.stringify(f,function(k,v){ return (k==='_orig'||k==='_gespeichert'||k==='preisInfo')?undefined:v; }); }
 function zeichneForm(){
+  if(F && F._orig==null) F._orig=formSig(F);
   if(F && F.nurMat) return zeichneMatForm();
   var e=F, h='<h2>'+L(e.id?'eintragBearb':'eintragNeu')+'</h2>';
   if(e.rechnung) h+='<div class="hinweis">'+(S.nutzer.rolle==='admin'?(e.rArt==='A'?'🟡 Per Abschlag ':'🟢 Schon ')+'abgerechnet ('+esc(e.rechnung)+'). Änderungen hier ändern die Rechnung in sevdesk nicht.':'🔒 '+Lt('ABGERECHNET'))+'</div>';
@@ -913,7 +915,7 @@ function zeichneForm(){
     h+='<label class="f">'+L('km','inl')+'</label><input type="number" inputmode="decimal" class="eing" id="fKm" value="'+(e.km===''||e.km==null?'':e.km)+'" placeholder="0">';
   }
   h+='<div id="fFehler"></div><div style="height:14px"></div><button class="gross b-navy" onclick="formSpeichern()">💾 '+L('speichern')+'</button><div style="height:8px"></div>';
-  h+='<div class="reihe"><button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>'+(e.id?'<button class="mittel" style="background:var(--rothell);color:var(--rot)" onclick="formLoeschen()">🗑 '+L('loeschen')+'</button>':'')+'</div>';
+  h+='<div class="reihe"><button class="mittel b-hell" onclick="schliesseBlatt(true)">'+L('abbrechen')+'</button>'+(e.id?'<button class="mittel" style="background:var(--rothell);color:var(--rot)" onclick="formLoeschen()">🗑 '+L('loeschen')+'</button>':'')+'</div>';
   oeffneBlatt(h, true);
 }
 /* Eine Materialzeile: Menge · Einheit · Artikel · ✕ / darunter Händler · Preis (· 🔎 Online-Preis für den Chef) */
@@ -978,7 +980,7 @@ function zeichneMatForm(){
     '<div id="fMat">'+e.material.map(matZeile).join('')+'</div>'+
     '<button class="mittel b-hell" style="min-height:44px" onclick="formLesen();F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">＋ '+L('matHinzu')+'</button>';
   h+='<div id="fFehler"></div><div style="height:14px"></div><button class="gross b-navy" onclick="formSpeichern()">💾 '+L('speichern')+'</button><div style="height:8px"></div>'+
-     '<button class="mittel b-hell" onclick="schliesseBlatt()">'+L('abbrechen')+'</button>';
+     '<button class="mittel b-hell" onclick="schliesseBlatt(true)">'+L('abbrechen')+'</button>';
   oeffneBlatt(h, true);
 }
 function matFormTag(id){ formLesen(); var neu=findeEintrag(id); if(!neu) return; matForm(neu.baustelle, id); }
@@ -1008,7 +1010,7 @@ function formLesen(){
   F.material.forEach(function(m){ if(m.ep===undefined) return; if(String(m.ep).trim()===''){ delete m.preis; return; } m.preis=Math.round(zahl(m.ep)*(zahl(m.menge)||1)*100)/100; });
 }
 function formSpeichern(){
-  formLesen(); var e=JSON.parse(JSON.stringify(F));
+  formLesen(); var still=F._still; delete F._still; var e=JSON.parse(JSON.stringify(F)); delete e._orig; delete e._gespeichert; delete e.nurMat;
   if(!e.datum){ return fFehler('Datum'); }
   if(e.typ==='A'){
     if(!e.baustelle) return fFehler(Lt('BAUSTELLE_FEHLT'));
@@ -1021,13 +1023,15 @@ function formSpeichern(){
   var ma=e.ma||S.nutzer.id;
   var ziel = (neu && ma===S.nutzer.id) ? buchen('eintragSpeichern',{eintrag:e}) : rufe('eintragSpeichern',{eintrag:e}).then(function(m){ monatSetzen(m); });
   if(e.typ==='A' && e.baustelle && ((e.material||[]).length || (e.belege||[]).length)) setTimeout(function(){ rufeRoh('materialAblegen',{baustelle:e.baustelle}).catch(function(){}); }, 4000);
+  if(still){ schliesseBlatt(true); toast('⏳ '+(tr()?'Kaydediliyor / ':'')+'Wird gespeichert…'); }
   ziel.then(function(){
     // falls der laufende Eintrag bearbeitet wurde
     if(S.laufend && S.laufend.id===e.id && e.ende) S.laufend=null;
-    schliesseBlatt(); toast('✓ '+Lt('speichern')); render();
-  }).catch(function(f){ fFehler(fehlerText(f)); });
+    if(!still) schliesseBlatt(true);
+    toast('✓ '+(still?(tr()?'Otomatik kaydedildi / ':'')+'Automatisch gespeichert':Lt('speichern'))); if(!$('blatt').classList.contains('an')) render();
+  }).catch(function(f){ fFehler((still?(tr()?'Kaydedilmedi: ':'Nicht gespeichert: '):'')+fehlerText(f)); });
 }
-function fFehler(t){ $('fFehler').innerHTML='<div class="fehlerbox">'+esc(t)+'</div>'; }
+function fFehler(t){ var el=$('fFehler'); if(el && $('blatt').classList.contains('an')) el.innerHTML='<div class="fehlerbox">'+esc(t)+'</div>'; else toast('⚠ '+t); }
 function formLoeschen(){ var f=F; frage(L('sicherLoeschen'), L('loeschen'), function(){ F=f; loescheJetzt(); }); }
 function loescheJetzt(){
   rufe('eintragLoeschen',{id:F.id, ma:F.ma, monat:monatVon(F.datum)}).then(function(m){ monatSetzen(m); if(S.laufend&&S.laufend.id===F.id) S.laufend=null; schliesseBlatt(); toast('🗑'); render(); })
@@ -1515,7 +1519,12 @@ function oeffneBlatt(html, form){
   var b=$('blatt'); b.innerHTML='<div class="griff"></div><button class="blattZu" onclick="schliesseBlatt()" aria-label="zu">✕</button>'+html; b.scrollTop=0; b.style.transform='';
   $('schleier').classList.add('an'); b.classList.add('an'); document.documentElement.classList.add('blattOffen');
 }
-function schliesseBlatt(){ var b=$('blatt'); b.style.transform=''; b.classList.remove('an'); $('schleier').classList.remove('an'); document.documentElement.classList.remove('blattOffen'); F=null; }
+function schliesseBlatt(verwerfen){
+  if(!verwerfen && F && F._orig!=null && !F._gespeichert && ($('fMat')||$('fStart')||$('fDatum'))){
+    formLesen();
+    if(formSig(F)!==F._orig){ $('blatt').style.transform=''; F._still=true; formSpeichern(); return; }
+  }
+  var b=$('blatt'); b.style.transform=''; b.classList.remove('an'); $('schleier').classList.remove('an'); document.documentElement.classList.remove('blattOffen'); F=null; }
 (function(){ var b=$('blatt'), y0=null, dy=0, zieh=false;
   b.addEventListener('touchstart',function(e){ var t=e.target, obenTeil=(e.touches[0].clientY-b.getBoundingClientRect().top)<56;
     if(/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) { y0=null; return; }
