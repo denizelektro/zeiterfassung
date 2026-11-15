@@ -58,10 +58,11 @@ function api(token, aktion, daten) {
     _C = {}; _B = {};
     kopfPruefen_(T.MA);
     if (aktion === 'login') return ok(login_(daten.pin));
-    var ich = nutzerAusToken_(token);
+    var ich = claudeAusToken_(token) || nutzerAusToken_(token);
     if (!ich) return { ok: false, fehler: 'ANMELDUNG' };
     var f = AKTIONEN[aktion];
     if (!f) throw new Error('Unbekannte Aktion: ' + aktion);
+    if (ich.rolle === 'claude' ? !f.claude : f.claude) throw new Error('Keine Berechtigung');
     if (f.admin && ich.rolle !== 'admin') throw new Error('Keine Berechtigung');
     if (f.ohneLock) return ok(f.fn(ich, daten, token));
     var lock = LockService.getScriptLock();
@@ -125,6 +126,9 @@ var AKTIONEN = {
   importEintraege:{ admin: true, fn: function (ich, d) { return importEintraege_(d); } },
   kiSchluessel:   { admin: true, fn: function (ich, d) { return kiSchluessel_(d); } },
   haendlerNeu:    { fn: function (ich, d) { return haendlerNeu_(d); } },
+  claudeOffen:    { claude: true, fn: function (ich, d) { return claudeOffen_(); } },
+  claudePreis:    { claude: true, fn: function (ich, d) { return claudePreis_(d); } },
+  claudeAuftrag:  { claude: true, fn: function (ich, d) { aktualisieren_(T.AU, String(d.id || ''), { status: String(d.status || 'entwurf').slice(0, 20), notiz: String(d.notiz || '').slice(0, 500) }); return true; } },
   kiPreis:        { admin: true, ohneLock: true, fn: function (ich, d) { return kiPreis_(d); } },
   kiDiagnose:     { admin: true, ohneLock: true, fn: function (ich, d) { return kiDiagnose_(d); } },
   claude:         { admin: true, ohneLock: true, fn: function (ich, d) { return claudeListe_(); } },
@@ -512,6 +516,7 @@ function eintragSpeichern_(ich, d) {
     .map(function (m) {
       var o = { menge: String(m.menge || '').slice(0, 10), einheit: String(m.einheit || '').slice(0, 10), text: String(m.text).slice(0, 120) };
       if (m.haendler) o.haendler = String(m.haendler).slice(0, 40);
+      if (m.quelle) o.quelle = String(m.quelle).slice(0, 200);
       var au = String(m.aufschlag == null ? '' : m.aufschlag).replace(',', '.').replace('+', '').trim();
       if (au !== '' && !isNaN(Number(au))) o.aufschlag = Math.round(Number(au) * 10) / 10;
       var p = String(m.preis == null ? '' : m.preis).replace(',', '.').trim();
@@ -948,7 +953,7 @@ function wert_(v, k) {
   if (v === null || v === undefined) return '';
   if (Object.prototype.toString.call(v) === '[object Date]') {
     if (k === 'start' || k === 'ende' || k === 'pauseStart' || k === 'abfahrt' || k === 'ankunft') return Utilities.formatDate(v, APP.zeitzone, 'HH:mm');
-    if (k === 'datum') return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM-dd');
+    if (k === 'datum' || k === 'von' || k === 'bis') return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM-dd');
     if (k === 'monat' || k === 'saldoMonat') return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM');
     return Utilities.formatDate(v, APP.zeitzone, 'yyyy-MM-dd HH:mm:ss');
   }
@@ -1103,6 +1108,52 @@ function abrechnung_(d) {
     rechnungen: Object.keys(rech).map(function (k) { var r = rech[k]; return { nr: r.nr, art: r.art, datum: r.datum, von: r.von, bis: r.bis, betrag: r.betrag, stunden: r.stunden }; })
       .sort(function (a, b) { return a.datum < b.datum ? -1 : 1; })
   };
+}
+
+/* ---------- Zugang für Claude (tägliche Aufgabe): eigener Schlüssel, nur claude-Aktionen ---------- */
+function claudeAusToken_(token) {
+  var k = PropertiesService.getScriptProperties().getProperty('CLAUDE_KEY');
+  return k && String(token || '') === 'CLAUDE:' + k ? { id: 'claude', name: 'Claude', rolle: 'claude' } : null;
+}
+/** Einmal im Editor ausführen: legt den Schlüssel an und speichert ihn in Drive › Zeiterfassung › „Claude-Zugang (nicht teilen).txt“. */
+function claudeZugangAnlegen() {
+  var k = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+  PropertiesService.getScriptProperties().setProperty('CLAUDE_KEY', k);
+  var ordner = ordner_(DriveApp.getRootFolder(), APP.ordner), name = 'Claude-Zugang (nicht teilen).txt';
+  var alt = ordner.getFilesByName(name); while (alt.hasNext()) alt.next().setTrashed(true);
+  ordner.createFile(name, 'CLAUDE:' + k + '\n', MimeType.PLAIN_TEXT);
+  console.log('Schlüssel angelegt und in Drive gespeichert.');
+}
+var PREIS_HAENDLER = /hornbach|temo/i;   // nur diese Händler sucht Claude online nach
+function claudeOffen_() {
+  var bsN = {}; zeilen_(T.BS).forEach(function (b) { bsN[b.id] = b.name; });
+  var preise = [];
+  zeilen_(T.E).forEach(function (e) {
+    if (e.typ !== 'A' || e.rechnung) return;
+    var m = []; try { m = JSON.parse(e.material || '[]'); } catch (x) {}
+    m.forEach(function (z, i) {
+      if (!z || !String(z.text || '').trim() || !PREIS_HAENDLER.test(String(z.haendler || ''))) return;
+      if (z.preis != null && z.preis !== '') return;   // vorhandene Preise nie überschreiben
+      preise.push({ eid: e.id, i: i, datum: e.datum, baustelle: bsN[e.baustelle] || '', menge: z.menge, einheit: z.einheit, text: z.text, haendler: z.haendler });
+    });
+  });
+  var auftraege = zeilen_(T.AU).filter(function (a) { return a.status === 'offen'; }).map(function (a) {
+    var r = abrechnung_({ baustelle: a.baustelle, von: a.von, bis: a.bis }), bs = finde_(T.BS, a.baustelle) || {};
+    var saetze = {}; try { saetze = JSON.parse(a.saetze || '{}'); } catch (x) {}
+    return { id: a.id, kunde: bs.name, adresse: bs.adresse || '', von: a.von, bis: a.bis, notiz: a.notiz, datei: a.datei, saetze: saetze, aufschlag: Number(a.aufschlag || 30),
+      personen: r.personen, material: r.material, km: r.km, tage: r.tage, abschlaege: r.status.abschlag };
+  });
+  return { preise: preise, auftraege: auftraege };
+}
+function claudePreis_(d) {
+  var e = finde_(T.E, String(d.eid || '')); if (!e) throw new Error('Eintrag fehlt');
+  var m = JSON.parse(e.material || '[]'), z = m[Number(d.i)];
+  if (!z || String(z.text).trim() !== String(d.text || '').trim()) throw new Error('Zeile hat sich geändert');
+  if (z.preis != null && z.preis !== '') return { uebersprungen: true };   // Deniz hat inzwischen selbst einen Preis eingetragen
+  var p = Number(String(d.preis).replace(',', '.')); if (!(p > 0)) throw new Error('Preis ungültig');
+  z.preis = Math.round(p * 100) / 100; z.quelle = String(d.quelle || 'Claude').slice(0, 200);
+  aktualisieren_(T.E, e.id, { material: JSON.stringify(m), geaendert: jetzt_() });
+  return { ok: true };
 }
 
 /* ---------- „Rechnung schreiben“: Auftrag an Claude (Entwurf in sevdesk) ---------- */

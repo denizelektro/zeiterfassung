@@ -912,8 +912,9 @@ function matZeile(m,i){
     '<button class="x" onclick="formLesen();F.material.splice('+i+',1);if(!F.material.length)F.material.push({menge:\'\',einheit:\'Stk\',text:\'\'});zeichneForm()">✕</button>'+
     '<div class="mat2"><select class="eing hd" data-i="'+i+'" data-k="haendler" onchange="haendlerGewaehlt(this,'+i+')"><option value="">'+(tr()?'Mağaza / ':'')+'Händler…</option>'+hl.map(function(x){ return '<option '+(m.haendler===x?'selected':'')+'>'+esc(x)+'</option>'; }).join('')+'<option value="+">＋ '+(tr()?'Yeni / ':'')+'Neu…</option></select>'+
     (adm?'<input class="eing au" inputmode="text" placeholder="± %" value="'+(m.aufschlag==null?'':esc(String(m.aufschlag).replace('.',',')))+'" data-i="'+i+'" data-k="aufschlag" oninput="matVk('+i+')">':'')+
-    '<input class="eing pr" inputmode="decimal" placeholder="€ '+(adm?'EK ':'')+(tr()?'toplam':'gesamt')+'" value="'+(m.preis==null?'':esc(String(m.preis).replace('.',',')))+'" data-i="'+i+'" data-k="preis" oninput="matVk('+i+')"></div>'+
+    '<input class="eing pr" inputmode="decimal" placeholder="€ '+(adm?'EK ':'')+(tr()?'toplam':'gesamt')+'" value="'+(m.preis==null?'':esc(String(m.preis).replace('.',',')))+'" data-i="'+i+'" data-k="preis" oninput="matVk('+i+');var q=F.material['+i+'];if(q)delete q.quelle"></div>'+
     (adm?'<div class="klein pInfo" id="vk'+i+'">'+matVkText(m.preis,m.aufschlag)+'</div>':'')+
+    (adm&&m.quelle?'<div class="klein pInfo">💡 '+esc(m.quelle)+'</div>':'')+
     (m.preisInfo?'<div class="klein pInfo">'+m.preisInfo+'</div>':'')+'</div>';
 }
 function matVkText(p,a){
