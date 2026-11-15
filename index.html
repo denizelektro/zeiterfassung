@@ -685,10 +685,12 @@ function rechnungDialog(id){
       '<div class="zeileL"><span>Summe Arbeitszeit netto</span><b id="raLohn"></b></div></div>';
     // Material
     var fehlt=a.material.filter(function(m){ return m.ohnePreis||!m.ek; }).length;
-    h+='<div class="karte"><p class="titel">📦 Material</p>'+(a.material.length?a.material.map(function(m){
-        return '<div class="zeileL"><div><b>'+esc(String(m.menge).replace('.',','))+' '+esc(m.einheit)+'</b> '+esc(m.text)+(m.haendler?' <span class="klein">· '+esc(m.haendler)+'</span>':'')+(m.ohnePreis||!m.ek?' <span class="pill p-gelb">Preis fehlt</span>':'')+'</div>'+
-          '<div style="text-align:right;white-space:nowrap" class="klein">EK '+euro(m.ek)+(m.aufschlag!=null?'<br>'+(m.aufschlag>=0?'+':'')+String(m.aufschlag).replace('.',',')+' %':'')+'</div></div>'; }).join(''):'<div class="leer">Kein Material</div>')+
-      '<div class="zeileL"><span class="klein">Aufschlag auf Material (für Zeilen ohne eigenes %)</span><label class="einh" style="width:90px"><input class="eing" id="raMatPz" inputmode="text" value="'+esc(abAufschlag())+'" oninput="raRechnen()" onblur="LS.setItem(\'ze_aufschlag\',this.value)"><span>%</span></label></div>'+
+    h+='<div class="karte"><p class="titel">📦 Material</p>'+
+      '<div class="zeileL" style="gap:6px"><span class="klein">Aufschlag für alle Zeilen</span><span style="display:flex;gap:6px;align-items:center"><label class="einh" style="width:84px"><input class="eing" id="raMatPz" inputmode="decimal" value="'+esc(abAufschlag())+'" oninput="raRechnen()" onblur="LS.setItem(\'ze_aufschlag\',this.value)"><span>%</span></label><button class="mittel b-hell" style="width:auto;padding:8px 10px;min-height:0" onclick="raAlleSetzen()">↓ alle</button></span></div>'+
+      (a.material.length?a.material.map(function(m,mi){
+        return '<div class="zeileL"><div style="min-width:0"><b>'+esc(String(m.menge).replace('.',','))+' '+esc(m.einheit)+'</b> '+esc(m.text)+(m.haendler?' <span class="klein">· '+esc(m.haendler)+'</span>':'')+(m.ohnePreis||!m.ek?' <span class="pill p-gelb">Preis fehlt</span>':'')+
+          '<div class="klein">EK '+euro(m.ek)+' → <b id="raMv'+mi+'"></b> netto</div></div>'+
+          '<label class="einh" style="width:84px;flex:none"><input class="eing" data-ra="mpz" data-mi="'+mi+'" inputmode="decimal" placeholder="'+esc(abAufschlag())+'" value="'+(m.aufschlag==null?'':esc(String(m.aufschlag).replace('.',',')))+'" oninput="raRechnen()"><span>%</span></label></div>'; }).join(''):'<div class="leer">Kein Material</div>')+
       '<div class="zeileL"><span>Summe Material netto</span><b id="raMat"></b></div>'+(fehlt?'<div class="klein">⚠ '+fehlt+' Position(en) ohne Preis – zählen mit 0 €.</div>':'')+'</div>';
     // Nachlass (wie in sevdesk: offizielle Werte oben, Nachlass als eigene Zeilen)
     h+='<div class="karte"><p class="titel">🏷 Nachlass</p>'+
@@ -706,12 +708,15 @@ function rechnungDialog(id){
     oeffneBlatt(h, true); raRechnen();
   }).catch(function(f){ oeffneBlatt('<p>'+esc(fehlerText(f))+'</p>'); });
 }
+function raAlleSetzen(){ var v=($('raMatPz')||{}).value||''; document.querySelectorAll('[data-ra="mpz"]').forEach(function(el){ el.value=v; }); raRechnen(); }
 function raRechnen(){
   if(!RA) return; var a=RA.a, lohn=0;
   document.querySelectorAll('[data-ra="satz"]').forEach(function(el){ lohn+=zahl(el.dataset.std)*zahl(el.value); });
   var lohnVoll=lohn, spz=-Math.abs(zahl(String(($('raStdRab')||{}).value||''))); lohn=lohn*(1+spz/100);
   var mpz=zahl(String(($('raMatPz')||{}).value||'').replace('+','')), matBr=0;
-  a.material.forEach(function(m){ var pz=m.aufschlag==null?mpz:m.aufschlag; matBr+=(m.ek||0)*(1+pz/100); });
+  var mInp={}; document.querySelectorAll('[data-ra="mpz"]').forEach(function(el){ mInp[el.dataset.mi]=el.value; el.placeholder=String(($('raMatPz')||{}).value||''); });
+  RA.mpzListe=[];
+  a.material.forEach(function(m,mi){ var v=mInp[mi], pz=(v!=null&&String(v).trim()!=='')?zahl(String(v).replace('+','')):mpz; RA.mpzListe[mi]=pz; var br=(m.ek||0)*(1+pz/100); matBr+=br; var o=$('raMv'+mi); if(o) o.textContent=euro(br/1.19); });
   var mrab=Math.abs(zahl(String(($('raMatRab')||{}).value||''))), matVoll=matBr/1.19, mat=matVoll*(1-mrab/100), netto=lohn+mat, mwst=netto*0.19, brutto=netto+mwst;
   var ab=(a.status&&a.status.abschlag||[]).reduce(function(s,x){ return s+(x.betrag===''?0:zahl(x.betrag)); },0);
   if($('raLohn')) $('raLohn').textContent=euro(lohnVoll);
@@ -732,7 +737,7 @@ function rechnungVorschau(){
     var m=maR[el.dataset.id]||{}; pos.push({t:(m.rolle==='admin'?'Elektroniker, Bauleitung':'Elektroniker (Geselle)')+' – Arbeitszeit', menge:std, einh:'Std.', ep:satz}); });
   var nachl=[];
   if(w.spz) nachl.push({t:'Nachlass '+String(Math.abs(w.spz)).replace('.',',')+' % auf die Arbeitszeit', menge:1, einh:'psch.', ep:lohnBasis*w.spz/100, rabatt:true});
-  a.material.forEach(function(m){ var pz=m.aufschlag==null?w.mpz:m.aufschlag, ges=(m.ek||0)*(1+pz/100)/1.19, mg=zahl(m.menge)||1;
+  a.material.forEach(function(m,mi){ var pz=RA.mpzListe[mi], ges=(m.ek||0)*(1+pz/100)/1.19, mg=zahl(m.menge)||1;
     pos.push({t:m.text, menge:mg, einh:m.einheit||'Stk', ep:ges/mg}); });
   if(w.mrab) nachl.push({t:'Nachlass '+String(w.mrab).replace('.',',')+' % auf das Material', menge:1, einh:'psch.', ep:-(w.matVoll-w.mat), rabatt:true});
   pos=pos.concat(nachl);
@@ -758,7 +763,8 @@ function rechnungAnfordern(id, art){
   art=art||'rechnung'; var b=$(art==='angebot'?'raAng':'raOk'), alt=b.innerHTML; b.disabled=true; b.innerHTML='⏳ …';
   var saetze={}; document.querySelectorAll('[data-ra="satz"]').forEach(function(el){ var v=zahl(el.value); if(v>0){ saetze[el.dataset.id]=v; LS.setItem('ze_satz_'+el.dataset.id, fmt2(v)); } });
   var w=RA&&RA.werte||{}, notiz=$('raNotiz').value+(w.spz?' · Stunden '+(w.spz>0?'+':'')+w.spz+' %':'')+(w.mrab?' · Material -'+w.mrab+' %':'')+(w.netto?' · App-Summe netto '+euro(w.netto)+' / brutto '+euro(w.brutto):'');
-  rufe('rechnungAuftrag',{baustelle:id, art:art, notiz:notiz, saetze:saetze, aufschlag:w.mpz==null?zahl(abAufschlag()):w.mpz}).then(function(r){
+  var matPz={}; (RA&&RA.a.material||[]).forEach(function(m,mi){ matPz[m.text+'|'+(m.einheit||'')+'|'+(m.haendler||'')]=RA.mpzListe[mi]; });
+  rufe('rechnungAuftrag',{baustelle:id, art:art, notiz:notiz, saetze:saetze, aufschlag:w.mpz==null?zahl(abAufschlag()):w.mpz, extra:{matPz:matPz, stdRab:-w.spz||0, matRab:w.mrab||0}}).then(function(r){
     var wort=art==='angebot'?'Angebot':'Rechnung';
     var neu=(r.liste||[]).filter(function(x){ return x.status==='offen' && (x.art||'rechnung')===art; })[0], neuId=neu&&neu.id;
     oeffneBlatt('<h2>✓ '+wort+' angefordert</h2><p>'+fStd(r.offen)+' h ('+deD(r.von)+' – '+deD(r.bis)+') plus Material. Die Übersicht liegt in Drive unter „Rechn.-Angebot“.</p>'+

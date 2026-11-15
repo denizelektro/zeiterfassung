@@ -26,7 +26,7 @@ var T = {
   E:   { name: 'Eintraege',   kopf: ['id', 'ma', 'datum', 'typ', 'baustelle', 'start', 'ende', 'pause', 'pauseStart', 'taetigkeit', 'material', 'km', 'geaendert', 'belege', 'abfahrt', 'ankunft', 'uebern', 'rechnung'] },
   RE:  { name: 'Rechnungen',  kopf: ['id', 'baustelle', 'nr', 'art', 'datum', 'von', 'bis', 'betrag', 'stunden', 'erstellt'] },
   TAG: { name: 'Abschluesse', kopf: ['ma', 'datum', 'zeit'] },
-  AU:  { name: 'Rechnungsauftraege', kopf: ['id', 'baustelle', 'von', 'bis', 'stunden', 'saetze', 'aufschlag', 'datei', 'erstellt', 'status', 'notiz', 'art'] },
+  AU:  { name: 'Rechnungsauftraege', kopf: ['id', 'baustelle', 'von', 'bis', 'stunden', 'saetze', 'aufschlag', 'datei', 'erstellt', 'status', 'notiz', 'art', 'extra'] },
   SP:  { name: 'Monatssperren', kopf: ['ma', 'monat', 'zeit', 'tabelleId', 'pdfId'] }
 };
 
@@ -1141,8 +1141,13 @@ function claudeOffen_() {
   var auftraege = zeilen_(T.AU).filter(function (a) { return a.status === 'offen'; }).map(function (a) {
     var r = abrechnung_({ baustelle: a.baustelle, von: a.von, bis: a.bis }), bs = finde_(T.BS, a.baustelle) || {};
     var saetze = {}; try { saetze = JSON.parse(a.saetze || '{}'); } catch (x) {}
+    var extra = {}; try { extra = JSON.parse(a.extra || '{}'); } catch (x) {}
+    // in der App eingestellte Aufschläge je Materialzeile übernehmen
+    var mp = extra.matPz || {};
+    r.material.forEach(function (m) { var k = m.text + '|' + (m.einheit || '') + '|' + (m.haendler || ''); if (mp[k] != null) m.aufschlag = Number(mp[k]); });
     return { id: a.id, art: a.art || 'rechnung', kunde: bs.name, adresse: bs.adresse || '', von: a.von, bis: a.bis, notiz: a.notiz, datei: a.datei, saetze: saetze, aufschlag: Number(a.aufschlag || 30),
-      personen: r.personen, material: r.material, km: r.km, tage: r.tage, abschlaege: r.status.abschlag };
+      personen: r.personen, material: r.material, km: r.km, tage: r.tage, abschlaege: r.status.abschlag,
+      nachlassArbeitszeitProzent: Number(extra.stdRab || 0), nachlassMaterialProzent: Number(extra.matRab || 0) };
   });
   return { preise: preise, auftraege: auftraege };
 }
@@ -1178,7 +1183,7 @@ function rechnungAuftrag_(d) {
   // offene Aufträge derselben Baustelle ersetzen
   zeilen_(T.AU).filter(function (x) { return x.baustelle === bs.id && x.status === 'offen' && (x.art || 'rechnung') === art; }).forEach(function (x) { aktualisieren_(T.AU, x.id, { status: 'ersetzt' }); });
   schreiben_(T.AU, { id: Utilities.getUuid().slice(0, 8), baustelle: bs.id, von: von, bis: bis, stunden: a.status.offen, saetze: JSON.stringify(saetze), aufschlag: auf,
-    datei: t.url, erstellt: jetzt_(), status: 'offen', notiz: String(d.notiz || '').slice(0, 300), art: art });
+    datei: t.url, erstellt: jetzt_(), status: 'offen', notiz: String(d.notiz || '').slice(0, 300), art: art, extra: JSON.stringify(d.extra || {}).slice(0, 20000) });
   return { liste: auftraege_(bs.id), offen: a.status.offen, von: von, bis: bis, datei: t.url };
 }
 
