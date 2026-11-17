@@ -650,15 +650,14 @@ function bsSeite(id){
      '<button onclick="belegWahl(\'bsErfassen\',\''+id+'\')">🧾 '+L('beleg')+'</button>'+
      '<button onclick="bsErfassen(\''+id+'\',\'mass\')">📏 '+L('aufmass')+'</button>'+
      '<button onclick="dokuFoto(\''+id+'\')">📷 '+L('fotoDoku')+'</button></div>';
-  // Material-Summe auf dieser Baustelle
-  var mat={}; es.forEach(function(e){ (e.material||[]).forEach(function(m){ var k=(m.text||'').trim().toLowerCase()+'|'+(m.einheit||''); var z=mat[k]||(mat[k]={text:m.text,einheit:m.einheit,menge:0}); z.menge+=zahl(m.menge); }); });
-  var mk=Object.keys(mat);
-  if(mk.length) h+='<div class="karte" style="margin-top:10px"><p class="titel">📦 '+(tr()?'Toplam malzeme / ':'')+'Material bisher</p>'+mk.map(function(k){ var z=mat[k]; return '<div class="klein" style="padding:3px 0"><b>'+String(Math.round(z.menge*100)/100).replace('.',',')+' '+esc(z.einheit||'')+'</b> '+esc(z.text)+'</div>'; }).join('')+'</div>';
-  if(S.nutzer.rolle==='admin') h+='<div style="height:10px"></div><button class="mittel b-navy" style="color:#fff" onclick="rechnungDialog(\''+id+'\')">🧾 Rechnung schreiben</button>';
-  h+='<p class="titel" style="margin:12px 0 6px">'+(tr()?'Son kayıtlar / ':'')+'Letzte Einträge</p>';
-  h+= es.length ? es.slice(0,8).map(function(e){ return '<button class="eintrag" onclick="eintragForm(\''+e.id+'\')"><div class="k"><span class="bsn">'+datumKurz(e.datum)+'</span><span class="std">'+(e.ende?fStd(std(e))+' h':'● '+e.start)+'</span></div>'+
+  // Nur der heutige Tag – alte Tage öffnet man über den Kalender
+  var heuteE=es.filter(function(e){ return e.datum===heute; }), letzt=es.filter(function(e){ return e.datum<heute && e.ende; })[0];
+  h+='<p class="titel" style="margin:12px 0 6px">'+(tr()?'Bugün / ':'')+'Heute · '+datumKurz(heute)+'</p>';
+  h+= heuteE.length ? heuteE.map(function(e){ return '<button class="eintrag" onclick="eintragForm(\''+e.id+'\')"><div class="k"><span class="bsn">'+e.start+'–'+(e.ende||'…')+'</span><span class="std">'+(e.ende?fStd(std(e))+' h':'●')+'</span></div>'+
       (e.taetigkeit?'<div class="taet">'+esc(e.taetigkeit)+'</div>':'')+(e.material&&e.material.length?'<div class="klein">📦 '+e.material.length+' '+(tr()?'malzeme':'Material')+'</div>':'')+'</button>'; }).join('')
-    : '<div class="leer">'+L('kein')+'</div>';
+    : '<div class="leer">'+(tr()?'Bugün kayıt yok / ':'')+'Heute noch nichts eingetragen</div>';
+  if(letzt) h+='<div class="klein" style="margin-top:8px">'+(tr()?'Son gün / ':'')+'Letzter Tag: '+datumKurz(letzt.datum)+' · '+letzt.start+'–'+letzt.ende+' · '+fStd(std(letzt))+' h <span style="opacity:.7">('+(tr()?'takvimden açın / ':'')+'zum Ändern im Kalender antippen)</span></div>';
+  if(S.nutzer.rolle==='admin') h+='<div style="height:10px"></div><button class="mittel b-navy" style="color:#fff" onclick="rechnungDialog(\''+id+'\')">🧾 Rechnung / Angebot</button>';
   oeffneBlatt(h);
 }
 function bsManuell(id){ S.auswahlBs=id; LS.setItem('ze_letzteBs',id);
@@ -668,14 +667,23 @@ function bsManuell(id){ S.auswahlBs=id; LS.setItem('ze_letzteBs',id);
 /* „Rechnung schreiben“ (nur Chef): alles Offene bis heute als Auftrag an Claude → Entwurf in sevdesk */
 var RA=null;
 function raSatz(m){ var v=abSatz(m.id); return v!==''?v:(m.rolle==='admin'?'63':'55'); }
-function rechnungDialog(id){
-  oeffneBlatt('<h2>🧾 Rechnung schreiben</h2><div class="lade" style="min-height:100px">…</div>');
-  Promise.all([rufe('abrechnung',{baustelle:id, von:'2000-01-01', bis:heuteIso()}), rufe('rechnungAuftraege',{baustelle:id})]).then(function(r){
+function rechnungDialog(id, von, bis){
+  if(von===undefined && RAK && RAK.id===id){ von=RAK.von; bis=RAK.bis; }
+  von=von||'2000-01-01'; bis=bis||heuteIso();
+  oeffneBlatt('<h2>🧾 Rechnung / Angebot</h2><div class="lade" style="min-height:100px">…</div>');
+  Promise.all([rufe('abrechnung',{baustelle:id, von:von, bis:bis}), rufe('rechnungAuftraege',{baustelle:id}), von!=='2000-01-01'?rufe('abrechnung',{baustelle:id, von:'2000-01-01', bis:heuteIso()}):null]).then(function(r){
     var a=r[0], au=r[1].liste, st=a.status||{offen:0,abschlag:[]}, offen=au.filter(function(x){ return x.status==='offen'; })[0];
-    RA={id:id, a:a};
+    var alleTage={}; (r[2]||a).tage.forEach(function(t){ if(!t.rechnung) alleTage[t.datum]=(alleTage[t.datum]||0)+t.std; });
+    RA={id:id, a:a, von:von, bis:bis};
     var tage=a.tage.filter(function(t){ return !t.rechnung; }).map(function(t){ return t.datum; }).sort();
     var maRolle={}; (S.mitarbeiter||[]).forEach(function(m){ maRolle[m.id]=m; });
-    var h='<h2>🧾 Rechnung schreiben</h2><div class="klein" style="margin:-6px 0 10px">'+esc(a.baustelle.name)+(tage.length?' · '+deD(tage[0])+' – '+deD(tage[tage.length-1]):'')+'</div>';
+    var h='<h2>🧾 Rechnung / Angebot</h2><div class="klein" style="margin:-6px 0 8px">'+esc(a.baustelle.name)+'</div>';
+    var tl=Object.keys(alleTage).sort();
+    h+='<div class="karte"><p class="titel">📅 Zeitraum</p><div class="reihe"><div><label class="f">von</label><input type="date" class="eing" style="min-width:0;width:100%" id="raVon" value="'+(von==='2000-01-01'?(tl[0]||heuteIso()):von)+'"></div><div><label class="f">bis</label><input type="date" class="eing" style="min-width:0;width:100%" id="raBis" value="'+bis+'"></div></div>'+
+      '<button class="mittel b-hell" style="margin-top:8px" onclick="raMerken();rechnungDialog(\''+id+'\',$(\'raVon\').value,$(\'raBis\').value)">↻ Zeitraum übernehmen</button>'+
+      (tl.length?'<div class="klein" style="margin-top:8px">Offene Tage – antippen für nur diesen Tag:</div><div class="chips" style="flex-wrap:wrap">'+tl.map(function(t){ var an=von===t&&bis===t; return '<button class="'+(an?'an':'')+'" onclick="raMerken();rechnungDialog(\''+id+'\',\''+t+'\',\''+t+'\')">'+datumKurz(t)+' · '+fStd(alleTage[t])+'h</button>'; }).join('')+
+        '<button onclick="raMerken();rechnungDialog(\''+id+'\',\'2000-01-01\',\''+heuteIso()+'\')">Alle</button></div>':'')+
+      '<div class="klein" style="margin-top:6px">Berechnet: '+(tage.length?deD(tage[0])+' – '+deD(tage[tage.length-1])+' ('+tage.length+' Tag(e))':'keine offenen Tage')+'</div></div>';
     if(offen) h+='<div class="hinweis">⏳ Schon angefordert am '+esc(offen.erstellt.slice(8,10)+'.'+offen.erstellt.slice(5,7)+'. '+offen.erstellt.slice(11,16))+'. Neu anfordern ersetzt diesen Auftrag.</div>';
     if(!st.offen && !a.material.length){ h+='<p>Bei dieser Baustelle ist nichts mehr offen.</p><button class="mittel b-hell" onclick="bsSeite(\''+id+'\')">'+L('abbrechen')+'</button>'; oeffneBlatt(h,true); return; }
     // Arbeitszeit
@@ -710,7 +718,7 @@ function rechnungDialog(id){
 }
 var RAK=null;   // Einstellungen merken, wenn man zwischendurch eine Materialzeile bearbeitet
 function raMerken(){ if(!RA) return; var mp={}; document.querySelectorAll('[data-ra="mpz"]').forEach(function(el){ var m=RA.a.material[+el.dataset.mi]; if(m) mp[m.text+'|'+m.einheit+'|'+(m.haendler||'')]=el.value; });
-  RAK={id:RA.id, std:($('raStdRab')||{}).value, mat:($('raMatRab')||{}).value, alle:($('raMatPz')||{}).value, notiz:($('raNotiz')||{}).value, mp:mp}; }
+  RAK={id:RA.id, von:RA.von, bis:RA.bis, std:($('raStdRab')||{}).value, mat:($('raMatRab')||{}).value, alle:($('raMatPz')||{}).value, notiz:($('raNotiz')||{}).value, mp:mp}; }
 function raHalten(id){ if(!RAK||RAK.id!==id) return; var k=RAK; RAK=null;
   if($('raStdRab')) $('raStdRab').value=k.std||''; if($('raMatRab')) $('raMatRab').value=k.mat||''; if($('raMatPz')&&k.alle!=null) $('raMatPz').value=k.alle; if($('raNotiz')) $('raNotiz').value=k.notiz||'';
   document.querySelectorAll('[data-ra="mpz"]').forEach(function(el){ var m=RA.a.material[+el.dataset.mi]; if(!m) return; var v=k.mp[m.text+'|'+m.einheit+'|'+(m.haendler||'')]; if(v!=null) el.value=v; }); }
@@ -791,7 +799,7 @@ function rechnungAnfordern(id, art){
   var saetze={}; document.querySelectorAll('[data-ra="satz"]').forEach(function(el){ var v=zahl(el.value); if(v>0){ saetze[el.dataset.id]=v; LS.setItem('ze_satz_'+el.dataset.id, fmt2(v)); } });
   var w=RA&&RA.werte||{}, notiz=$('raNotiz').value+(w.spz?' · Stunden '+(w.spz>0?'+':'')+w.spz+' %':'')+(w.mrab?' · Material -'+w.mrab+' %':'')+(w.netto?' · App-Summe netto '+euro(w.netto)+' / brutto '+euro(w.brutto):'');
   var matPz={}; (RA&&RA.a.material||[]).forEach(function(m,mi){ matPz[m.text+'|'+(m.einheit||'')+'|'+(m.haendler||'')]=RA.mpzListe[mi]; });
-  rufe('rechnungAuftrag',{baustelle:id, art:art, notiz:notiz, saetze:saetze, aufschlag:w.mpz==null?zahl(abAufschlag()):w.mpz, extra:{matPz:matPz, stdRab:-w.spz||0, matRab:w.mrab||0}}).then(function(r){
+  rufe('rechnungAuftrag',{baustelle:id, art:art, von:RA.von==='2000-01-01'?'':RA.von, bis:RA.bis, notiz:notiz, saetze:saetze, aufschlag:w.mpz==null?zahl(abAufschlag()):w.mpz, extra:{matPz:matPz, stdRab:-w.spz||0, matRab:w.mrab||0}}).then(function(r){
     var wort=art==='angebot'?'Angebot':'Rechnung';
     var neu=(r.liste||[]).filter(function(x){ return x.status==='offen' && (x.art||'rechnung')===art; })[0], neuId=neu&&neu.id;
     oeffneBlatt('<h2>✓ '+wort+' angefordert</h2><p>'+fStd(r.offen)+' h ('+deD(r.von)+' – '+deD(r.bis)+') plus Material. Die Übersicht liegt in Drive unter „Rechn.-Angebot“.</p>'+
@@ -850,7 +858,7 @@ function eintragsListe(liste, datum, m){
   var darf = !m.gesperrt || S.nutzer.rolle==='admin';
   if(darf){
     h+='<button class="mittel b-hell" onclick="eintragForm(null,\''+datum+'\')">＋ '+L('manuell')+'</button>';
-    if(S.ansicht==='kalender' && !liste.some(function(e){ return e.typ!=='A'; })){
+    if(S.ansicht==='kalender' && !liste.length){
       var maK=S.ma||S.nutzer.id;
       h+='<div class="reihe" style="margin-top:8px"><button class="mittel" style="background:var(--blauhell);color:var(--blau)" onclick="abwSchnell(\''+maK+'\',\''+datum+'\',\'U\')">🏖 '+L('urlaub')+'</button>'+
          '<button class="mittel" style="background:var(--rothell);color:var(--rot)" onclick="abwSchnell(\''+maK+'\',\''+datum+'\',\'K\')">🤒 '+L('krank')+'</button></div>';
@@ -897,10 +905,18 @@ function eintragWeg(id){
 }
 function tagStatus(datum, zu){
   var ma = S.ansicht==='kalender' ? S.ma : S.nutzer.id;
-  rufe(zu?'tagAbschliessen':'tagOeffnen',{ma:ma, datum:datum}).then(function(m){ monatSetzen(m); toast(zu?'✓ '+Lt('tagZu'):Lt('tagOeffnen')); if($('blatt').classList.contains('an')&&S.ansicht==='kalender') tagDetail(datum); render(); })
+  rufe(zu?'tagAbschliessen':'tagOeffnen',{ma:ma, datum:datum}).then(function(m){ monatSetzen(m); toast(zu?'✓ '+Lt('tagZu'):Lt('tagOeffnen'));
+    if(zu && S.nutzer.rolle==='admin'){ var bsl=tagBaustellen(ma, datum); if(bsl.length){ render(); return tagNachAbschluss(datum, bsl); } }
+    if($('blatt').classList.contains('an')&&S.ansicht==='kalender') tagDetail(datum); render(); })
    .catch(function(f){ toast(fehlerText(f)); });
 }
 
+function tagBaustellen(ma, datum){ var d=monatDaten(ma||S.nutzer.id, monatVon(datum)); if(!d) return []; var o={}; d.eintraege.forEach(function(e){ if(e.datum===datum&&e.typ==='A'&&e.baustelle) o[e.baustelle]=1; }); return Object.keys(o); }
+function tagNachAbschluss(datum, bsl){
+  oeffneBlatt('<h2>✓ '+datumText(datum)+' abgeschlossen</h2><p class="klein">Möchtest du für diesen Tag gleich eine Rechnung oder ein Angebot machen?</p>'+
+    bsl.map(function(b){ return '<button class="gross b-navy" style="margin-bottom:8px" onclick="rechnungDialog(\''+b+'\',\''+datum+'\',\''+datum+'\')">🧾 '+esc(bsName(b))+' – Rechnung / Angebot</button>'; }).join('')+
+    '<button class="mittel b-hell" onclick="tagDetail(\''+datum+'\')">← Zurück</button>');
+}
 /* ======================= KALENDER ======================= */
 function kalGrid(ma, mo, d, fl, klein){
   var h='<div class="kal-wrap"'+(klein?'':' id="kalwrap"')+'><div class="kal'+(klein?' klein':'')+'"'+(klein?'':' id="kal"')+'>';
@@ -1010,6 +1026,7 @@ function tagDetail(iso){
   if(ft) h+='<div style="margin-bottom:10px"><span class="pill p-grau">🎉 '+Lt('feiertag')+': '+esc(ft)+'</span></div>';
   if(d.gesperrt && S.nutzer.rolle!=='admin') h+='<div class="hinweis">🔒 '+Lt('gesperrt')+'</div>';
   h+=eintragsListe(es, iso, d)+'<div id="tagReise"></div>';
+  if(S.nutzer.rolle==='admin') tagBaustellen(ma, iso).forEach(function(b){ h+='<button class="mittel b-hell" style="margin-top:8px" onclick="rechnungDialog(\''+b+'\',\''+iso+'\',\''+iso+'\')">🧾 '+esc(bsName(b))+' – Rechnung / Angebot für diesen Tag</button>'; });
   oeffneBlatt(h);
   swipeAktivieren($('blatt'));
   if(es.some(function(e){return e.typ==='A';})) rufeRoh('reisePunkte',{ma:ma, datum:iso}).then(function(r){
@@ -1149,9 +1166,9 @@ function matFormTag(id){ formLesen(); var neu=findeEintrag(id); if(!neu) return;
 /** Material-Maske öffnen: laufender oder heutiger Eintrag, sonst der letzte Tag dieser Baustelle */
 function matForm(bsId, eid){
   var l=S.laufend, liste=bsEintraege(bsId), heute=heuteIso();
-  var e = eid ? findeEintrag(eid) : (l&&l.baustelle===bsId&&findeEintrag(l.id)) || liste.filter(function(x){ return x.datum===heute; })[0] || liste[0];
+  var e = eid ? findeEintrag(eid) : (l&&l.baustelle===bsId&&findeEintrag(l.id)) || liste.filter(function(x){ return x.datum===heute; })[0];
   if(!e){
-    oeffneBlatt('<h2>＋ '+L('material')+'</h2><p>'+(tr()?'Bu şantiyede henüz çalışma kaydı yok. Önce işe başlayın veya saati elle girin.<br><span class="klein">':'')+'Für diese Baustelle gibt es noch keinen Arbeitstag. Bitte zuerst Arbeit beginnen oder die Zeit manuell eintragen.'+(tr()?'</span>':'')+'</p>'+
+    oeffneBlatt('<h2>＋ '+L('material')+'</h2><p>'+(tr()?'Bu şantiyede henüz çalışma kaydı yok. Önce işe başlayın veya saati elle girin.<br><span class="klein">':'')+'Heute gibt es für diese Baustelle noch keinen Eintrag. Bitte zuerst Arbeit beginnen oder die Zeit manuell eintragen. (Material für frühere Tage: im Kalender den Tag antippen.)'+(tr()?'</span>':'')+'</p>'+
       (!l?'<button class="gross b-gruen" onclick="schliesseBlatt();stempel(\'beginn\',\''+bsId+'\')">▶ '+L('beginnen')+'</button><div style="height:8px"></div>':'')+
       '<button class="mittel b-navy" style="color:#fff" onclick="bsManuell(\''+bsId+'\')">✏️ '+L('manuell')+'</button>');
     return false;

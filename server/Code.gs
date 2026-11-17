@@ -1214,9 +1214,10 @@ function rechnungAuftrag_(d) {
   kopfPruefen_(T.AU);
   var art = d.art === 'angebot' ? 'angebot' : 'rechnung';
   var bs = finde_(T.BS, String(d.baustelle || '')); if (!bs) throw new Error('Baustelle wählen');
-  var offen = zeilen_(T.E).filter(function (e) { return e.typ === 'A' && e.baustelle === bs.id && !e.rechnung; }).map(eintragAus_);
-  if (!offen.length) throw new Error('Keine offenen Stunden bei dieser Baustelle');
-  var von = offen.map(function (e) { return e.datum; }).sort()[0], bis = heute_();
+  var vonW = /^\d{4}-\d{2}-\d{2}$/.test(String(d.von || '')) ? d.von : '0000', bisW = /^\d{4}-\d{2}-\d{2}$/.test(String(d.bis || '')) ? d.bis : heute_();
+  var offen = zeilen_(T.E).filter(function (e) { return e.typ === 'A' && e.baustelle === bs.id && !e.rechnung && e.datum >= vonW && e.datum <= bisW; }).map(eintragAus_);
+  if (!offen.length) throw new Error('Keine offenen Stunden in diesem Zeitraum');
+  var von = vonW !== '0000' ? vonW : offen.map(function (e) { return e.datum; }).sort()[0], bis = bisW;
   // Stundensätze: was im Abrechnungs-Fenster eingetragen ist, sonst Chef 63 € / Mitarbeiter 55 € (vor dem Schreiben wird nachgefragt)
   var saetze = {}; zeilen_(T.MA).forEach(function (m) { var v = d.saetze && Number(d.saetze[m.id]); saetze[m.id] = v > 0 ? v : (m.rolle === 'admin' ? 63 : 55); });
   var auf = d.aufschlag == null || d.aufschlag === '' ? 30 : Number(d.aufschlag);
